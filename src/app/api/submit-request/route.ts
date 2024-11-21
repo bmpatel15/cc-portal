@@ -81,30 +81,22 @@ async function uploadFilesToDrive(
 // Helper function to parse Google credentials
 function parseGoogleCredentials(credentialsString: string) {
   try {
-    console.log('Raw credentials string:', credentialsString.substring(0, 50) + '...');
     const parsed = JSON.parse(credentialsString);
     
     // Fix private key formatting
     if (parsed.private_key) {
-      // Replace literal "\n" strings with actual newlines
-      parsed.private_key = parsed.private_key
-        .replace(/\\n/g, '\n')
-        .replace(/\s+/g, '\n') // Replace any whitespace sequences with newlines
-        .replace(/"\n"/g, '\n');
+      // Remove any existing formatting first
+      let cleanKey = parsed.private_key
+        .replace(/-----(BEGIN|END) PRIVATE KEY-----/g, '')
+        .replace(/\\n/g, '')
+        .replace(/\s+/g, '');
         
-      // Ensure proper key format
-      if (!parsed.private_key.startsWith('-----BEGIN PRIVATE KEY-----\n')) {
-        parsed.private_key = '-----BEGIN PRIVATE KEY-----\n' + parsed.private_key;
-      }
-      if (!parsed.private_key.endsWith('\n-----END PRIVATE KEY-----\n')) {
-        parsed.private_key = parsed.private_key + '\n-----END PRIVATE KEY-----\n';
-      }
+      // Add proper formatting back
+      parsed.private_key = 
+        '-----BEGIN PRIVATE KEY-----\n' +
+        cleanKey.match(/.{1,64}/g)?.join('\n') +
+        '\n-----END PRIVATE KEY-----\n';
     }
-    
-    console.log('Private key format check:', 
-      parsed.private_key?.startsWith('-----BEGIN PRIVATE KEY-----\n') &&
-      parsed.private_key?.endsWith('\n-----END PRIVATE KEY-----\n')
-    );
     
     return parsed;
   } catch (error) {
