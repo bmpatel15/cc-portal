@@ -78,6 +78,16 @@ async function uploadFilesToDrive(
   );
 }
 
+// Helper function to parse Google credentials
+function parseGoogleCredentials(credentialsString: string) {
+  try {
+    return JSON.parse(credentialsString);
+  } catch (error) {
+    console.error('Error parsing Google credentials:', error);
+    throw new Error('Invalid Google credentials format - must be valid JSON');
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Validate environment variables first
@@ -92,21 +102,21 @@ export async function POST(request: NextRequest) {
     // Parse credentials properly
     let credentials;
     try {
-      credentials = config.googleCredentials;
-      if (!credentials) {
+      const rawCredentials = config.googleCredentials;
+      if (!rawCredentials) {
         throw new Error('Google credentials not configured');
       }
+      credentials = parseGoogleCredentials(rawCredentials);
     } catch (error: unknown) {
       console.error('Error parsing credentials:', error);
       throw new Error('Invalid Google credentials format');
     }
 
-    // Initialize Google Drive with proper credentials
+    // Initialize Google Drive with parsed credentials
     const driveClient = google.drive({
       version: 'v3',
       auth: new google.auth.GoogleAuth({
-        credentials: typeof credentials === 'string' ? undefined : credentials,
-        keyFile: typeof credentials === 'string' ? credentials : undefined,
+        credentials,
         scopes: ['https://www.googleapis.com/auth/drive.file'],
       }),
     });
