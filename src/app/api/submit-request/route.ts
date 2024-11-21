@@ -81,7 +81,32 @@ async function uploadFilesToDrive(
 // Helper function to parse Google credentials
 function parseGoogleCredentials(credentialsString: string) {
   try {
-    return JSON.parse(credentialsString);
+    console.log('Raw credentials string:', credentialsString.substring(0, 50) + '...');
+    const parsed = JSON.parse(credentialsString);
+    
+    // Fix private key formatting
+    if (parsed.private_key) {
+      // Replace literal "\n" strings with actual newlines
+      parsed.private_key = parsed.private_key
+        .replace(/\\n/g, '\n')
+        .replace(/\s+/g, '\n') // Replace any whitespace sequences with newlines
+        .replace(/"\n"/g, '\n');
+        
+      // Ensure proper key format
+      if (!parsed.private_key.startsWith('-----BEGIN PRIVATE KEY-----\n')) {
+        parsed.private_key = '-----BEGIN PRIVATE KEY-----\n' + parsed.private_key;
+      }
+      if (!parsed.private_key.endsWith('\n-----END PRIVATE KEY-----\n')) {
+        parsed.private_key = parsed.private_key + '\n-----END PRIVATE KEY-----\n';
+      }
+    }
+    
+    console.log('Private key format check:', 
+      parsed.private_key?.startsWith('-----BEGIN PRIVATE KEY-----\n') &&
+      parsed.private_key?.endsWith('\n-----END PRIVATE KEY-----\n')
+    );
+    
+    return parsed;
   } catch (error) {
     console.error('Error parsing Google credentials:', error);
     throw new Error('Invalid Google credentials format - must be valid JSON');
