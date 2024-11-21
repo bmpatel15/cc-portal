@@ -1,15 +1,19 @@
-// app/api/submit-request/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import TelegramBot from 'node-telegram-bot-api';
+import { createClient } from '@supabase/supabase-js';
 import { loadConfig } from '@/lib/config';
-import { Readable } from 'stream';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 // Add validation for required environment variables
 const requiredEnvVars = [
-  'GOOGLE_APPLICATION_CREDENTIALS',
-  'GOOGLE_DRIVE_FOLDER_ID',
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_CHAT_ID',
   'EMAIL_HOST',
@@ -38,71 +42,33 @@ function validateFormData(formData: FormData) {
   }
 }
 
-// Helper function to convert FormData file to stream
-async function formDataFileToStream(file: File) {
-  const arrayBuffer = await file.arrayBuffer();
-  return Readable.from(Buffer.from(arrayBuffer));
-}
-
-// Helper function to upload files to Google Drive
-async function uploadFilesToDrive(
-  files: File[], 
-  driveClient: ReturnType<typeof google.drive>
-) {
+// Helper function to upload files to Supabase Storage
+async function uploadFilesToSupabase(files: File[]) {
   return Promise.all(
     files.map(async (file) => {
-      const fileMetadata = {
-        name: file.name,
-        parents: [process.env.GOOGLE_DRIVE_FOLDER_ID!],
-      };
-      
-      const fileStream = await formDataFileToStream(file);
-      
-      const media = {
-        mimeType: file.type,
-        body: fileStream,
-      };
-      
-      const response = await driveClient.files.create({
-        requestBody: fileMetadata,
-        media: media,
-        fields: 'id, webViewLink',
-      });
-      
+      const fileName = `${Date.now()}-${file.name}`;
+      const { data, error } = await supabase.storage
+        .from('print-requests')  // Create this bucket in Supabase
+        .upload(`files/${fileName}`, await file.arrayBuffer(), {
+          contentType: file.type,
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      // Get public URL for the file
+      const { data: { publicUrl } } = supabase.storage
+        .from('print-requests')
+        .getPublicUrl(`files/${fileName}`);
+
       return {
         name: file.name,
-        id: response.data.id,
-        webViewLink: response.data.webViewLink,
+        path: data.path,
+        url: publicUrl
       };
     })
   );
-}
-
-// Helper function to parse Google credentials
-function parseGoogleCredentials(credentialsString: string) {
-  try {
-    const parsed = JSON.parse(credentialsString);
-    
-    // Fix private key formatting
-    if (parsed.private_key) {
-      // Remove any existing formatting first
-      const cleanKey = parsed.private_key
-        .replace(/-----(BEGIN|END) PRIVATE KEY-----/g, '')
-        .replace(/\\n/g, '')
-        .replace(/\s+/g, '');
-        
-      // Add proper formatting back
-      parsed.private_key = 
-        '-----BEGIN PRIVATE KEY-----\n' +
-        cleanKey.match(/.{1,64}/g)?.join('\n') +
-        '\n-----END PRIVATE KEY-----\n';
-    }
-    
-    return parsed;
-  } catch (error) {
-    console.error('Error parsing Google credentials:', error);
-    throw new Error('Invalid Google credentials format - must be valid JSON');
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -116,32 +82,10 @@ export async function POST(request: NextRequest) {
     // Get configuration
     const config = await loadConfig();
 
-    // Parse credentials properly
-    let credentials;
-    try {
-      const rawCredentials = config.googleCredentials;
-      if (!rawCredentials) {
-        throw new Error('Google credentials not configured');
-      }
-      credentials = parseGoogleCredentials(rawCredentials);
-    } catch (error: unknown) {
-      console.error('Error parsing credentials:', error);
-      throw new Error('Invalid Google credentials format');
-    }
-
-    // Initialize Google Drive with parsed credentials
-    const driveClient = google.drive({
-      version: 'v3',
-      auth: new google.auth.GoogleAuth({
-        credentials,
-        scopes: ['https://www.googleapis.com/auth/drive.file'],
-      }),
-    });
-
     const files = formData.getAll('files') as File[];
-    const uploadedFiles = await uploadFilesToDrive(files, driveClient);
+    const uploadedFiles = await uploadFilesToSupabase(files);
 
-    // Rest of your code using config values
+    // Create the message
     const message = `
 New request submitted:
 Full Name: ${formData.get('fullName')}
@@ -153,14 +97,14 @@ Quantity: ${formData.get('quantity')}
 Project Type: ${formData.get('projectType')}
 Project Description: ${formData.get('projectDescription')}
 Uploaded Files:
-${uploadedFiles.map(file => `- ${file.name}: ${file.webViewLink}`).join('\n')}
+${uploadedFiles.map(file => `- ${file.name}: ${file.url}`).join('\n')}
     `;
 
-    // Update these to use config values
+    // Send Telegram notification
     const bot = new TelegramBot(config.telegramToken, { polling: false });
     await bot.sendMessage(config.telegramChatId, message);
 
-    // Send email using config values
+    // Send email notification
     const transporter = nodemailer.createTransport({
       host: config.email.host,
       port: parseInt(config.email.port),
@@ -180,7 +124,8 @@ ${uploadedFiles.map(file => `- ${file.name}: ${file.webViewLink}`).join('\n')}
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Request submitted successfully' 
+      message: 'Request submitted successfully',
+      files: uploadedFiles 
     });
     
   } catch (error) {
