@@ -374,6 +374,8 @@ export default function ModernRequestForm() {
                           name="photographerCount"
                           type="number"
                           min="1"
+                          value={photographerCount}
+                          onChange={(e) => setPhotographerCount(e.target.value)}
                           required
                           className="h-8 sm:h-9 text-sm sm:text-base"
                         />
@@ -398,6 +400,8 @@ export default function ModernRequestForm() {
                         <Textarea 
                           id="photoLocation"
                           name="photoLocation"
+                          value={photoLocation}
+                          onChange={(e) => setPhotoLocation(e.target.value)}
                           required
                           className="min-h-[80px] text-sm sm:text-base"
                         />
@@ -408,6 +412,8 @@ export default function ModernRequestForm() {
                         <Textarea 
                           id="photoDeliverables"
                           name="photoDeliverables"
+                          value={photoDeliverables}
+                          onChange={(e) => setPhotoDeliverables(e.target.value)}
                           placeholder="e.g., number of edited photos"
                           required
                           className="min-h-[80px] text-sm sm:text-base"
@@ -439,6 +445,8 @@ export default function ModernRequestForm() {
                           name="videographerCount"
                           type="number"
                           min="1"
+                          value={videographerCount}
+                          onChange={(e) => setVideographerCount(e.target.value)}
                           required
                           className="h-8 sm:h-9 text-sm sm:text-base"
                         />
@@ -463,6 +471,8 @@ export default function ModernRequestForm() {
                         <Textarea 
                           id="videoAudience"
                           name="videoAudience"
+                          value={videoAudience}
+                          onChange={(e) => setVideoAudience(e.target.value)}
                           required
                           className="min-h-[80px] text-sm sm:text-base"
                         />
@@ -473,6 +483,8 @@ export default function ModernRequestForm() {
                         <Textarea 
                           id="videoLocation"
                           name="videoLocation"
+                          value={videoLocation}
+                          onChange={(e) => setVideoLocation(e.target.value)}
                           required
                           className="min-h-[80px] text-sm sm:text-base"
                         />
@@ -498,6 +510,8 @@ export default function ModernRequestForm() {
                           id="videoDeadline"
                           name="videoDeadline"
                           type="date"
+                          value={videoDeadline}
+                          onChange={(e) => setVideoDeadline(e.target.value)}
                           required
                           className="h-8 sm:h-9 text-sm sm:text-base"
                         />
