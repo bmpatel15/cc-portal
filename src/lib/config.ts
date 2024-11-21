@@ -2,7 +2,10 @@ import { getSecret } from './secrets';
 
 export async function loadConfig() {
   return {
-    googleCredentials: await getSecret('GOOGLE_APPLICATION_CREDENTIALS'),
+    supabase: {
+      url: await getSecret('NEXT_PUBLIC_SUPABASE_URL'),
+      serviceKey: await getSecret('SUPABASE_SERVICE_ROLE_KEY'),
+    },
     telegramToken: await getSecret('TELEGRAM_BOT_TOKEN'),
     telegramChatId: await getSecret('TELEGRAM_CHAT_ID'),
     email: {
@@ -14,6 +17,5 @@ export async function loadConfig() {
       from: await getSecret('EMAIL_FROM'),
       to: await getSecret('EMAIL_TO'),
     },
-    googleDriveFolderId: await getSecret('GOOGLE_DRIVE_FOLDER_ID'),
   };
 } 

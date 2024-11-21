@@ -4,12 +4,6 @@ import TelegramBot from 'node-telegram-bot-api';
 import { createClient } from '@supabase/supabase-js';
 import { loadConfig } from '@/lib/config';
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 // Add validation for required environment variables
 const requiredEnvVars = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -43,12 +37,12 @@ function validateFormData(formData: FormData) {
 }
 
 // Helper function to upload files to Supabase Storage
-async function uploadFilesToSupabase(files: File[]) {
+async function uploadFilesToSupabase(files: File[], supabase: ReturnType<typeof createClient>) {
   return Promise.all(
     files.map(async (file) => {
       const fileName = `${Date.now()}-${file.name}`;
       const { data, error } = await supabase.storage
-        .from('print-requests')  // Create this bucket in Supabase
+        .from('print-requests')
         .upload(`files/${fileName}`, await file.arrayBuffer(), {
           contentType: file.type,
           cacheControl: '3600',
@@ -57,7 +51,6 @@ async function uploadFilesToSupabase(files: File[]) {
 
       if (error) throw error;
 
-      // Get public URL for the file
       const { data: { publicUrl } } = supabase.storage
         .from('print-requests')
         .getPublicUrl(`files/${fileName}`);
@@ -76,14 +69,20 @@ export async function POST(request: NextRequest) {
     // Validate environment variables first
     validateEnvVars();
 
-    const formData = await request.formData();
-    validateFormData(formData);
-
     // Get configuration
     const config = await loadConfig();
 
+    // Initialize Supabase client with loaded config
+    const supabase = createClient(
+      config.supabase.url,
+      config.supabase.serviceKey
+    );
+
+    const formData = await request.formData();
+    validateFormData(formData);
+
     const files = formData.getAll('files') as File[];
-    const uploadedFiles = await uploadFilesToSupabase(files);
+    const uploadedFiles = await uploadFilesToSupabase(files, supabase);
 
     // Create the message
     const message = `
