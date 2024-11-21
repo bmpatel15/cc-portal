@@ -163,23 +163,30 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       phone: formData.get('phone') as string,
       department: formData.get('department') as string,
       eventName: formData.get('eventName') as string,
-      quantity: Number(formData.get('quantity')),
-      projectType: formData.get('projectType') as string,
-      projectDescription: formData.get('projectDescription') as string,
-      files: formData.getAll('files') as File[]
+      team: formData.get('team') as string,
+      contentType: formData.get('contentType') as string,
+      files: [] // Initialize empty array
     };
+
+    // Only require files for printing requests
+    if (requestData.team === 'content-creation' && requestData.contentType === 'printing') {
+      const files = formData.getAll('artwork') as File[];
+      if (!files.length) {
+        throw new Error('At least one file is required for printing requests');
+      }
+      requestData.files = files;
+    }
 
     // Basic validation
     if (!requestData.fullName || !requestData.email || !requestData.department) {
       throw new Error('Missing required fields');
     }
 
-    // Upload files
-    const files = formData.getAll('files') as File[];
-    if (!files.length) {
-      throw new Error('At least one file is required');
+    // Only upload files if they exist
+    let uploadedFiles: UploadedFile[] = [];
+    if (requestData.files.length > 0) {
+      uploadedFiles = await uploadFiles(requestData.files, supabase);
     }
-    const uploadedFiles = await uploadFiles(files, supabase);
 
     // Send notifications
     await sendNotifications(requestData, uploadedFiles, config);

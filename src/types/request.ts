@@ -4,9 +4,11 @@ export interface PrintRequest {
   phone: string;
   department: string;
   eventName: string;
-  quantity: number;
-  projectType: string;
-  projectDescription: string;
+  team: string;
+  contentType?: string;
+  quantity?: number;
+  projectType?: string;
+  projectDescription?: string;
   files: File[];
 }
 
