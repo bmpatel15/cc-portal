@@ -1,9 +1,15 @@
 import { getSecret } from './secrets';
 
 export async function loadConfig() {
+  // Validate Supabase URL format
+  const supabaseUrl = await getSecret('NEXT_PUBLIC_SUPABASE_URL');
+  if (!supabaseUrl || !supabaseUrl.startsWith('https://')) {
+    throw new Error('Invalid Supabase URL. Must start with https://');
+  }
+
   return {
     supabase: {
-      url: await getSecret('NEXT_PUBLIC_SUPABASE_URL'),
+      url: supabaseUrl,
       serviceKey: await getSecret('SUPABASE_SERVICE_ROLE_KEY'),
     },
     telegramToken: await getSecret('TELEGRAM_BOT_TOKEN'),

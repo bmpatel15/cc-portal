@@ -7,16 +7,9 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '100mb'
     },
   },
-  api: {
-    bodyParser: {
-      sizeLimit: '100mb'
-    },
-    responseLimit: '100mb'
-  },
   async headers() {
     return [
       {
-        // Apply these headers to all routes
         source: '/:path*',
         headers: [
           {

@@ -3,139 +3,216 @@ import nodemailer from 'nodemailer';
 import TelegramBot from 'node-telegram-bot-api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { loadConfig } from '@/lib/config';
+import { PrintRequest, ApiResponse, UploadedFile } from '@/types/request';
 
-// Add validation for required environment variables
-const requiredEnvVars = [
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'TELEGRAM_BOT_TOKEN',
-  'TELEGRAM_CHAT_ID',
-  'EMAIL_HOST',
-  'EMAIL_PORT',
-  'EMAIL_SECURE',
-  'EMAIL_USER',
-  'EMAIL_PASS',
-  'EMAIL_FROM',
-  'EMAIL_TO'
-];
-
-// Helper function to validate environment variables
-function validateEnvVars() {
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-  if (missingVars.length > 0) {
-    throw new Error(`Missing environment variables: ${missingVars.join(', ')}`);
-  }
+// Helper function to sanitize filename
+function sanitizeFileName(fileName: string): string {
+  return fileName
+    .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace any character that's not alphanumeric, dot, or hyphen with underscore
+    .replace(/_{2,}/g, '_');         // Replace multiple consecutive underscores with a single one
 }
 
-// Helper function to validate form data
-function validateFormData(formData: FormData) {
-  const requiredFields = ['fullName', 'email', 'department', 'projectType'];
-  const missingFields = requiredFields.filter(field => !formData.get(field));
-  if (missingFields.length > 0) {
-    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-  }
-}
+// Helper function to upload files with better error handling
+async function uploadFiles(files: File[], supabase: SupabaseClient) {
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+  const BUCKET_NAME = 'cc-portal';
 
-// Helper function to upload files to Supabase Storage
-async function uploadFilesToSupabase(files: File[], supabase: SupabaseClient) {
-  return Promise.all(
-    files.map(async (file) => {
-      const fileName = `${Date.now()}-${file.name}`;
+  const uploadedFiles: UploadedFile[] = [];
+  const errors: string[] = [];
+
+  for (const file of files) {
+    try {
+      console.log('Processing file:', file.name);
+      
+      // Validate file size and type
+      if (file.size > MAX_FILE_SIZE) {
+        throw new Error(`File ${file.name} exceeds maximum size of 100MB`);
+      }
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        throw new Error(`File ${file.name} has unsupported type. Allowed types: JPG, PNG, PDF`);
+      }
+
+      // Sanitize the filename
+      const sanitizedName = sanitizeFileName(file.name);
+      const fileName = `${Date.now()}_${sanitizedName}`;
+      const filePath = `files/${fileName}`;
+
+      console.log('Uploading file:', {
+        originalName: file.name,
+        sanitizedName,
+        filePath
+      });
+
       const { data, error } = await supabase.storage
-        .from('print-requests')
-        .upload(`files/${fileName}`, await file.arrayBuffer(), {
+        .from(BUCKET_NAME)
+        .upload(filePath, await file.arrayBuffer(), {
           contentType: file.type,
           cacheControl: '3600',
           upsert: false
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase upload error:', error);
+        throw error;
+      }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('print-requests')
-        .getPublicUrl(`files/${fileName}`);
+      console.log('Upload successful:', data);
 
-      return {
+      // Get the base URL from your environment
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      // Construct the public URL
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/${BUCKET_NAME}/${filePath}`;
+
+      console.log('Generated URL:', publicUrl);
+
+      uploadedFiles.push({
         name: file.name,
         path: data.path,
         url: publicUrl
-      };
-    })
-  );
+      });
+
+    } catch (err) {
+      const error = err as Error;
+      console.error('Upload error:', error);
+      errors.push(`Failed to upload ${file.name}: ${error.message}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`File upload errors:\n${errors.join('\n')}`);
+  }
+
+  console.log('All files uploaded successfully:', uploadedFiles);
+  return uploadedFiles;
 }
 
-export async function POST(request: NextRequest) {
+// Helper function to send notifications
+async function sendNotifications(data: PrintRequest, files: UploadedFile[], config: Awaited<ReturnType<typeof loadConfig>>) {
+  const message = `
+New print request submitted:
+Full Name: ${data.fullName}
+Email: ${data.email}
+Phone: ${data.phone || 'Not provided'}
+Department: ${data.department}
+Event Name: ${data.eventName}
+Quantity: ${data.quantity}
+Project Type: ${data.projectType}
+Project Description: ${data.projectDescription}
+
+Uploaded Files:
+${files.map(file => `- ${file.name}: ${file.url}`).join('\n')}
+  `.trim();
+
+  // Send Telegram notification
+  const bot = new TelegramBot(config.telegramToken, { polling: false });
+  await bot.sendMessage(config.telegramChatId, message);
+
+  // Send email notification
+  const transporter = nodemailer.createTransport({
+    host: config.email.host,
+    port: parseInt(config.email.port),
+    secure: config.email.secure === 'true',
+    auth: {
+      user: config.email.user,
+      pass: config.email.pass,
+    },
+  });
+
+  await transporter.sendMail({
+    from: config.email.from,
+    to: config.email.to,
+    subject: 'New Print Request Submitted',
+    text: message,
+  });
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
-    // Validate environment variables first
-    validateEnvVars();
-
-    // Get configuration
     const config = await loadConfig();
+    
+    // Validate Supabase configuration
+    if (!config.supabase.url || !config.supabase.serviceKey) {
+      throw new Error('Invalid Supabase configuration');
+    }
 
-    // Initialize Supabase client with loaded config
-    const supabase: SupabaseClient = createClient(
-      config.supabase.url,
-      config.supabase.serviceKey
-    );
+    // Initialize Supabase client with validation
+    let supabase;
+    try {
+      supabase = createClient(
+        config.supabase.url,
+        config.supabase.serviceKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Supabase client creation error:', error);
+      throw new Error('Failed to initialize storage client');
+    }
 
     const formData = await request.formData();
-    validateFormData(formData);
-
-    const files = formData.getAll('files') as File[];
-    const uploadedFiles = await uploadFilesToSupabase(files, supabase);
-
-    // Create the message
-    const message = `
-New request submitted:
-Full Name: ${formData.get('fullName')}
-Email: ${formData.get('email')}
-Phone: ${formData.get('phone')}
-Department: ${formData.get('department')}
-Event Name: ${formData.get('eventName')}
-Quantity: ${formData.get('quantity')}
-Project Type: ${formData.get('projectType')}
-Project Description: ${formData.get('projectDescription')}
-Uploaded Files:
-${uploadedFiles.map(file => `- ${file.name}: ${file.url}`).join('\n')}
-    `;
-
-    // Send Telegram notification
-    const bot = new TelegramBot(config.telegramToken, { polling: false });
-    await bot.sendMessage(config.telegramChatId, message);
-
-    // Send email notification
-    const transporter = nodemailer.createTransport({
-      host: config.email.host,
-      port: parseInt(config.email.port),
-      secure: config.email.secure === 'true',
-      auth: {
-        user: config.email.user,
-        pass: config.email.pass,
-      },
-    });
-
-    await transporter.sendMail({
-      from: config.email.from,
-      to: config.email.to,
-      subject: 'New Print Request Submitted',
-      text: message,
-    });
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Request submitted successfully',
-      files: uploadedFiles 
-    });
     
+    // Parse form data
+    const requestData: PrintRequest = {
+      fullName: formData.get('fullName') as string,
+      email: formData.get('email') as string,
+      phone: formData.get('phone') as string,
+      department: formData.get('department') as string,
+      eventName: formData.get('eventName') as string,
+      quantity: Number(formData.get('quantity')),
+      projectType: formData.get('projectType') as string,
+      projectDescription: formData.get('projectDescription') as string,
+      files: formData.getAll('files') as File[]
+    };
+
+    // Basic validation
+    if (!requestData.fullName || !requestData.email || !requestData.department) {
+      throw new Error('Missing required fields');
+    }
+
+    // Upload files
+    const files = formData.getAll('files') as File[];
+    if (!files.length) {
+      throw new Error('At least one file is required');
+    }
+    const uploadedFiles = await uploadFiles(files, supabase);
+
+    // Send notifications
+    await sendNotifications(requestData, uploadedFiles, config);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Request submitted successfully',
+      files: uploadedFiles
+    });
+
   } catch (error) {
     console.error('Error processing request:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'An unknown error occurred',
-        details: process.env.NODE_ENV === 'development' ? error : undefined
-      }, 
-      { status: error instanceof Error && error.message.includes('Missing required fields') ? 400 : 500 }
-    );
+    
+    // More specific error messages
+    let errorMessage = 'An unknown error occurred';
+    let statusCode = 500;
+
+    if (error instanceof Error) {
+      if (error.message.includes('Invalid Supabase')) {
+        errorMessage = 'Storage service configuration error';
+        statusCode = 503;
+      } else if (error.message.includes('Missing required fields')) {
+        errorMessage = error.message;
+        statusCode = 400;
+      } else {
+        errorMessage = error.message;
+      }
+    }
+
+    return NextResponse.json({
+      success: false,
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? String(error) : undefined
+    }, { status: statusCode });
   }
 }
