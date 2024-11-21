@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import TelegramBot from 'node-telegram-bot-api';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { loadConfig } from '@/lib/config';
 
 // Add validation for required environment variables
@@ -37,7 +37,7 @@ function validateFormData(formData: FormData) {
 }
 
 // Helper function to upload files to Supabase Storage
-async function uploadFilesToSupabase(files: File[], supabase: ReturnType<typeof createClient>) {
+async function uploadFilesToSupabase(files: File[], supabase: SupabaseClient) {
   return Promise.all(
     files.map(async (file) => {
       const fileName = `${Date.now()}-${file.name}`;
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const config = await loadConfig();
 
     // Initialize Supabase client with loaded config
-    const supabase = createClient(
+    const supabase: SupabaseClient = createClient(
       config.supabase.url,
       config.supabase.serviceKey
     );
