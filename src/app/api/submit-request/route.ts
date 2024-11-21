@@ -86,7 +86,7 @@ function parseGoogleCredentials(credentialsString: string) {
     // Fix private key formatting
     if (parsed.private_key) {
       // Remove any existing formatting first
-      let cleanKey = parsed.private_key
+      const cleanKey = parsed.private_key
         .replace(/-----(BEGIN|END) PRIVATE KEY-----/g, '')
         .replace(/\\n/g, '')
         .replace(/\s+/g, '');
