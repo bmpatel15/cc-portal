@@ -1,8 +1,8 @@
 import type { RequestDetails, RequestStatus, Team } from '@/lib/schemas/request'
 
 /**
- * Hand-maintained mirror of supabase/migrations/0001_init.sql.
- * Keep in sync with the migration when columns change.
+ * Hand-maintained mirror of supabase/migrations/*.sql.
+ * Keep in sync with the migrations when columns change.
  */
 
 export type NotificationChannel = 'email' | 'telegram'
@@ -67,11 +67,16 @@ export interface ProfileRow {
   email: string
   full_name: string | null
   role: UserRole
+  is_active: boolean
   created_at: string
 }
+
+/** Just enough of a profile to name someone in the UI. */
+export type ProfileSummary = Pick<ProfileRow, 'id' | 'email' | 'full_name'>
 
 /** A request with everything the tracking page and admin drawer need. */
 export interface RequestWithRelations extends RequestRow {
   request_files: RequestFileRow[]
   request_status_history: RequestStatusHistoryRow[]
+  assignee: ProfileSummary | null
 }

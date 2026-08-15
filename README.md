@@ -22,26 +22,31 @@ npm run dev
 
 ### 1. Apply the database schema
 
-Run `supabase/migrations/0001_init.sql` against your project — either with the Supabase CLI
-(`supabase db push`) or by pasting it into the SQL editor. It is safe to re-run.
+Run the files in `supabase/migrations/` in order — either with the Supabase CLI (`supabase db push`)
+or by pasting them into the SQL editor. Both are safe to re-run.
 
-This creates `requests`, `request_files`, `request_status_history`, `notification_log`, and
-`profiles`, enables row level security on all of them, and syncs the `cc-portal` storage bucket.
+`0001_init.sql` creates `requests`, `request_files`, `request_status_history`, `notification_log`,
+and `profiles`, enables row level security on all of them, and syncs the `cc-portal` storage bucket.
+`0002_roles_and_assignment.sql` adds account approval (`profiles.is_active`), the `is_admin()`
+helper, and the assignment index and policies.
 
-### 2. Grant yourself staff access
+### 2. Grant yourself admin access
 
 Sign in once at `/login` to create your `auth.users` row (a `profiles` row is created automatically
 by trigger), then promote it:
 
 ```sql
-update public.profiles set role = 'admin' where email = 'you@example.org';
+update public.profiles set role = 'admin', is_active = true where email = 'you@example.org';
 ```
+
+Everyone after you can be approved from **Team** (`/admin/users`) in the dashboard — new signups
+land inactive and cannot open the queue until an admin activates them.
 
 ### 3. Configure the notification cron
 
-`vercel.json` schedules `/api/cron/dispatch-notifications` hourly. Vercel sends `CRON_SECRET` as a
-bearer token automatically. On the Hobby plan crons run at most once per day — if you need faster
-retries, raise the frequency on a paid plan.
+`vercel.json` schedules `/api/cron/dispatch-notifications` daily (`0 6 * * *`). Vercel sends
+`CRON_SECRET` as a bearer token automatically. On the Hobby plan crons run at most once per day —
+if you need faster retries, raise the frequency on a paid plan.
 
 Delivery is attempted inline at submission time, so the cron is a safety net for failures, not the
 primary path.
@@ -52,7 +57,8 @@ primary path.
 | --- | --- |
 | `/` | The request wizard |
 | `/track/[token]` | Public status page — no login, reached by the link in the confirmation email |
-| `/admin` | Staff queue, filters, and status updates |
+| `/admin` | Staff queue, filters, assignment, and status updates |
+| `/admin/users` | Admin only — approve accounts and set roles |
 | `/login` | Magic-link sign-in for staff |
 | `POST /api/requests` | Validates and stores a request, then queues notifications |
 | `POST /api/uploads/sign` | Mints a signed URL so the browser uploads straight to Storage |
@@ -74,6 +80,16 @@ short-lived signed URLs, so large artwork never streams through a serverless fun
 **Tracking tokens are never exposed to `anon`.** RLS denies anonymous access to every table. The
 tracking page looks the request up server-side with the service role, so no policy makes
 `tracking_token` directly queryable.
+
+**Permissions live in TypeScript, not RLS.** The dashboard reads and writes through the service-role
+client, which bypasses row level security entirely — so the policies are defence in depth and
+`src/lib/requests/permissions.ts` is the authority. Its pure functions decide who may move or assign
+a request, and both the UI (which offers only legal moves) and the service layer (which re-checks
+against the stored row before writing) call the same rules. Any new mutation must call them too.
+
+**A request has one owner.** Staff claim unassigned work and advance it forward through
+`pending → in_progress → review → complete`; only admins reassign, reopen, or cancel. Every
+transition is appended to `request_status_history` with the actor in `changed_by`.
 
 ## Scripts
 

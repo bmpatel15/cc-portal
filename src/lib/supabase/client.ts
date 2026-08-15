@@ -2,7 +2,7 @@
 
 import { createBrowserClient } from '@supabase/ssr'
 
-/** Browser client — anon key only, used for the admin magic-link sign-in flow. */
+/** Browser client — anon key only. Sign-in, sign-out, and setting a password. */
 export function getBrowserClient() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

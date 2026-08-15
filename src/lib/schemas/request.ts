@@ -22,6 +22,20 @@ export const REQUEST_STATUSES = [
 export const requestStatusSchema = z.enum(REQUEST_STATUSES)
 export type RequestStatus = z.infer<typeof requestStatusSchema>
 
+/**
+ * The happy path a request walks. `cancelled` sits outside it — it is reachable
+ * from anywhere but is not a stage.
+ *
+ * Both the tracking timeline and the permission rules read this, so "forward"
+ * means the same thing to the UI and to the server.
+ */
+export const STATUS_PIPELINE = [
+  'pending',
+  'in_progress',
+  'review',
+  'complete',
+] as const satisfies readonly RequestStatus[]
+
 const yesNo = z.enum(['yes', 'no'])
 export type YesNo = z.infer<typeof yesNo>
 
@@ -327,7 +341,7 @@ export const partialRequestSchema = baseSchema.extend({
 })
 
 /* -------------------------------------------------------------------------- */
-/* Status changes                                                             */
+/* Status changes and assignment                                              */
 /* -------------------------------------------------------------------------- */
 
 export const statusUpdateSchema = z.object({
@@ -336,6 +350,13 @@ export const statusUpdateSchema = z.object({
   note: z.string().trim().max(2000).optional().or(z.literal('')),
 })
 export type StatusUpdate = z.infer<typeof statusUpdateSchema>
+
+/** `assigneeId: null` unassigns. Who may do that is decided in permissions.ts. */
+export const assignmentSchema = z.object({
+  requestId: z.string().uuid(),
+  assigneeId: z.string().uuid().nullable(),
+})
+export type Assignment = z.infer<typeof assignmentSchema>
 
 export const signUploadSchema = z.object({
   fileName: requiredText('File name is required'),

@@ -17,21 +17,35 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { displayName } from '@/lib/profiles/display'
+import type { Actor } from '@/lib/requests/permissions'
 import { STATUS_LABELS, TEAM_LABELS } from '@/lib/schemas/labels'
 import { REQUEST_STATUSES, TEAMS, type RequestStatus, type Team } from '@/lib/schemas/request'
-import type { RequestWithRelations } from '@/lib/supabase/types'
+import type { ProfileSummary, RequestWithRelations } from '@/lib/supabase/types'
 import { cn } from '@/lib/utils'
 
 import { RequestDetailDialog } from './request-detail-dialog'
 
 type StatusFilter = RequestStatus | 'all'
+type OwnerFilter = 'all' | 'mine' | 'unassigned'
 
-export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }) {
+export function RequestsBoard({
+  requests,
+  actor,
+  staff,
+  initialRequestId,
+}: {
+  requests: RequestWithRelations[]
+  actor: Actor
+  staff: ProfileSummary[]
+  initialRequestId: string | null
+}) {
   const router = useRouter()
   const [status, setStatus] = React.useState<StatusFilter>('all')
   const [team, setTeam] = React.useState<Team | 'all'>('all')
+  const [owner, setOwner] = React.useState<OwnerFilter>('all')
   const [search, setSearch] = React.useState('')
-  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const [selectedId, setSelectedId] = React.useState<string | null>(initialRequestId)
 
   const counts = React.useMemo(() => {
     const base: Record<StatusFilter, number> = {
@@ -46,12 +60,22 @@ export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }
     return base
   }, [requests])
 
+  const ownerCounts = React.useMemo(
+    () => ({
+      mine: requests.filter((request) => request.assigned_to === actor.id).length,
+      unassigned: requests.filter((request) => !request.assigned_to).length,
+    }),
+    [requests, actor.id],
+  )
+
   const visible = React.useMemo(() => {
     const term = search.trim().toLowerCase()
 
     return requests.filter((request) => {
       if (status !== 'all' && request.status !== status) return false
       if (team !== 'all' && request.team !== team) return false
+      if (owner === 'mine' && request.assigned_to !== actor.id) return false
+      if (owner === 'unassigned' && request.assigned_to) return false
       if (!term) return true
 
       return [request.event_name, request.full_name, request.email, request.department]
@@ -59,7 +83,7 @@ export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }
         .toLowerCase()
         .includes(term)
     })
-  }, [requests, status, team, search])
+  }, [requests, status, team, owner, search, actor.id])
 
   const selected = requests.find((request) => request.id === selectedId) ?? null
 
@@ -119,6 +143,18 @@ export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }
           </div>
 
           <div className="flex flex-wrap gap-1.5">
+            <FilterChip active={owner === 'all'} onClick={() => setOwner('all')}>
+              Everyone
+            </FilterChip>
+            <FilterChip active={owner === 'mine'} onClick={() => setOwner('mine')}>
+              Mine ({ownerCounts.mine})
+            </FilterChip>
+            <FilterChip active={owner === 'unassigned'} onClick={() => setOwner('unassigned')}>
+              Unassigned ({ownerCounts.unassigned})
+            </FilterChip>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
             <FilterChip active={status === 'all'} onClick={() => setStatus('all')}>
               All ({counts.all})
             </FilterChip>
@@ -145,6 +181,7 @@ export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }
                   <TableHead className="hidden md:table-cell">Requester</TableHead>
                   <TableHead className="hidden sm:table-cell">Team</TableHead>
                   <TableHead className="hidden lg:table-cell">Event date</TableHead>
+                  <TableHead className="hidden md:table-cell">Assignee</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-0" />
                 </TableRow>
@@ -172,6 +209,15 @@ export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }
                     <TableCell className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
                       {format(new Date(request.event_datetime), 'd MMM yyyy')}
                     </TableCell>
+                    <TableCell className="hidden max-w-[10rem] md:table-cell">
+                      {request.assignee ? (
+                        <span className="truncate">
+                          {request.assigned_to === actor.id ? 'You' : displayName(request.assignee)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Unassigned</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={request.status} />
                     </TableCell>
@@ -197,6 +243,8 @@ export function RequestsBoard({ requests }: { requests: RequestWithRelations[] }
 
       <RequestDetailDialog
         request={selected}
+        actor={actor}
+        staff={staff}
         onClose={() => setSelectedId(null)}
         onUpdated={() => router.refresh()}
       />

@@ -2,12 +2,12 @@ import { format } from 'date-fns'
 import { Check, Circle, Dot } from 'lucide-react'
 
 import { STATUS_DESCRIPTIONS, STATUS_LABELS } from '@/lib/schemas/labels'
-import type { RequestStatus } from '@/lib/schemas/request'
+import { STATUS_PIPELINE, type RequestStatus } from '@/lib/schemas/request'
 import type { RequestStatusHistoryRow } from '@/lib/supabase/types'
 import { cn } from '@/lib/utils'
 
 /** The happy path a request walks; `cancelled` is shown only if it happened. */
-const PIPELINE: RequestStatus[] = ['pending', 'in_progress', 'review', 'complete']
+const PIPELINE: RequestStatus[] = [...STATUS_PIPELINE]
 
 export function RequestTimeline({
   status,

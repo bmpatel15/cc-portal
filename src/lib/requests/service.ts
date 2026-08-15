@@ -16,6 +16,7 @@ import {
 import { queueAndDeliver, type QueuedNotification } from '@/lib/notifications/dispatch'
 import { staffEmailRecipient } from '@/lib/notifications/email'
 import { telegramRecipient } from '@/lib/notifications/telegram'
+import { canAssign, canChangeStatus, type Actor } from '@/lib/requests/permissions'
 import { adminRequestUrl, trackingUrl } from '@/lib/urls'
 
 /**
@@ -29,7 +30,8 @@ import { adminRequestUrl, trackingUrl } from '@/lib/urls'
 const REQUEST_SELECT = `
   *,
   request_files (*),
-  request_status_history (*)
+  request_status_history (*),
+  assignee:profiles!requests_assigned_to_fkey (id, email, full_name)
 `
 
 function toContext(
@@ -243,17 +245,25 @@ export async function getRequestCounts(): Promise<Record<RequestStatus, number>>
 /* Status transitions                                                         */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The permission check lives here rather than in the server action so that it
+ * runs against the row actually being written — the caller's copy of the request
+ * may be stale, and the admin client bypasses RLS, so this is the only gate.
+ */
 export async function updateRequestStatus(
   requestId: string,
   status: RequestStatus,
   note: string | undefined,
-  changedBy: string | null,
+  actor: Actor,
 ): Promise<RequestStatusHistoryRow | null> {
   const supabase = getAdminClient()
 
   const existing = await getRequestById(requestId)
   if (!existing) throw new Error('Request not found')
   if (existing.status === status) return null
+
+  const permitted = canChangeStatus(actor, existing, status)
+  if (!permitted.ok) throw new Error(permitted.reason)
 
   const { error: updateError } = await supabase
     .from('requests')
@@ -269,7 +279,7 @@ export async function updateRequestStatus(
       from_status: existing.status,
       to_status: status,
       note: note || null,
-      changed_by: changedBy,
+      changed_by: actor.id,
     })
     .select()
     .single()
@@ -293,4 +303,35 @@ export async function updateRequestStatus(
   ])
 
   return (history as RequestStatusHistoryRow) ?? null
+}
+
+/* -------------------------------------------------------------------------- */
+/* Assignment                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Give a request an owner, or clear it with `assigneeId: null`.
+ *
+ * Nothing is emailed: assignment is internal, and the requester's timeline
+ * tracks stages rather than staffing. The `requests_touch_updated_at` trigger
+ * moves `updated_at` for us.
+ */
+export async function assignRequest(
+  requestId: string,
+  assigneeId: string | null,
+  actor: Actor,
+): Promise<void> {
+  const existing = await getRequestById(requestId)
+  if (!existing) throw new Error('Request not found')
+  if (existing.assigned_to === assigneeId) return
+
+  const permitted = canAssign(actor, existing, assigneeId)
+  if (!permitted.ok) throw new Error(permitted.reason)
+
+  const { error } = await getAdminClient()
+    .from('requests')
+    .update({ assigned_to: assigneeId })
+    .eq('id', requestId)
+
+  if (error) throw new Error(`Failed to assign the request: ${error.message}`)
 }

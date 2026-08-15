@@ -2,27 +2,31 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { statusUpdateSchema } from '@/lib/schemas/request'
-import { updateRequestStatus } from '@/lib/requests/service'
-import { getCurrentProfile } from '@/lib/supabase/server'
+import { requireActiveProfile } from '@/lib/auth/require'
+import { assignmentSchema, statusUpdateSchema } from '@/lib/schemas/request'
+import { assignRequest, updateRequestStatus } from '@/lib/requests/service'
 
 export interface ActionResult {
   success: boolean
   message: string
 }
 
+function failure(error: unknown, fallback: string): ActionResult {
+  console.error(`${fallback}:`, error)
+  return { success: false, message: error instanceof Error ? error.message : fallback }
+}
+
 /**
  * Move a request to a new status.
  *
  * Writes the history row and queues the submitter's status-change email; the
- * queue makes that email retryable rather than fire-and-forget.
+ * queue makes that email retryable rather than fire-and-forget. Whether this
+ * actor may make this particular move is decided inside `updateRequestStatus`,
+ * against the stored row.
  */
 export async function updateStatusAction(input: unknown): Promise<ActionResult> {
-  const profile = await getCurrentProfile()
-
-  if (!profile) {
-    return { success: false, message: 'You are not signed in' }
-  }
+  const auth = await requireActiveProfile()
+  if (!auth.ok) return { success: false, message: auth.message }
 
   const parsed = statusUpdateSchema.safeParse(input)
 
@@ -35,7 +39,7 @@ export async function updateStatusAction(input: unknown): Promise<ActionResult> 
       parsed.data.requestId,
       parsed.data.status,
       parsed.data.note || undefined,
-      profile.id,
+      auth.actor,
     )
 
     revalidatePath('/admin')
@@ -45,10 +49,31 @@ export async function updateStatusAction(input: unknown): Promise<ActionResult> 
       message: changed ? 'Status updated and the requester was notified' : 'Status unchanged',
     }
   } catch (error) {
-    console.error('Status update failed:', error)
+    return failure(error, 'Could not update the status')
+  }
+}
+
+/** Claim a request, or — for admins — place it with anyone. */
+export async function assignRequestAction(input: unknown): Promise<ActionResult> {
+  const auth = await requireActiveProfile()
+  if (!auth.ok) return { success: false, message: auth.message }
+
+  const parsed = assignmentSchema.safeParse(input)
+
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? 'Invalid assignment' }
+  }
+
+  try {
+    await assignRequest(parsed.data.requestId, parsed.data.assigneeId, auth.actor)
+
+    revalidatePath('/admin')
+
     return {
-      success: false,
-      message: error instanceof Error ? error.message : 'Could not update the status',
+      success: true,
+      message: parsed.data.assigneeId ? 'Request assigned' : 'Request unassigned',
     }
+  } catch (error) {
+    return failure(error, 'Could not assign the request')
   }
 }

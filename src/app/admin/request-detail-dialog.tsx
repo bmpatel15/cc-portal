@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { format } from 'date-fns'
-import { ExternalLink, FileText, Loader2 } from 'lucide-react'
+import { ExternalLink, FileText, Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { RequestTimeline } from '@/components/request-timeline'
@@ -25,19 +25,33 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
+import { displayName } from '@/lib/profiles/display'
 import { STATUS_LABELS, TEAM_LABELS, formatDetails } from '@/lib/schemas/labels'
-import { REQUEST_STATUSES, type RequestStatus } from '@/lib/schemas/request'
+import { type RequestStatus } from '@/lib/schemas/request'
+import {
+  allowedNextStatuses,
+  canAssign,
+  canClaim,
+  statusBlockReason,
+  type Actor,
+} from '@/lib/requests/permissions'
 import { referenceCode } from '@/lib/notifications/templates'
-import type { RequestWithRelations } from '@/lib/supabase/types'
+import type { ProfileSummary, RequestWithRelations } from '@/lib/supabase/types'
 
-import { updateStatusAction } from './actions'
+import { assignRequestAction, updateStatusAction } from './actions'
+
+const UNASSIGNED = 'unassigned'
 
 export function RequestDetailDialog({
   request,
+  actor,
+  staff,
   onClose,
   onUpdated,
 }: {
   request: RequestWithRelations | null
+  actor: Actor
+  staff: ProfileSummary[]
   onClose: () => void
   onUpdated: () => void
 }) {
@@ -45,9 +59,11 @@ export function RequestDetailDialog({
   const [note, setNote] = React.useState('')
   const [pending, startTransition] = React.useTransition()
 
-  // Reset the form whenever a different request is opened.
+  // Reset the form whenever a different request is opened, or the one on screen
+  // moves. The dropdown lists only onward moves, so the current status is not a
+  // valid selection — start on the placeholder.
   React.useEffect(() => {
-    setStatus(request?.status ?? '')
+    setStatus('')
     setNote('')
   }, [request?.id, request?.status])
 
@@ -56,24 +72,44 @@ export function RequestDetailDialog({
   const details = formatDetails(request.team, request.details)
   const changed = status !== '' && status !== request.status
 
-  function submit() {
-    if (!request || !changed) return
+  // The same rules the server will apply, so the panel never offers a move that
+  // would come back as an error.
+  const nextStatuses = allowedNextStatuses(actor, request)
+  const blockReason = statusBlockReason(actor, request)
+  const mayReassign = canAssign(actor, request, null).ok
+  const mayClaim = canClaim(actor, request)
 
+  function run(action: () => Promise<{ success: boolean; message: string }>, close: boolean) {
     startTransition(async () => {
-      const result = await updateStatusAction({
-        requestId: request.id,
-        status,
-        note: note.trim() || undefined,
-      })
+      const result = await action()
 
       if (result.success) {
         toast.success(result.message)
         onUpdated()
-        onClose()
+        if (close) onClose()
       } else {
         toast.error(result.message)
       }
     })
+  }
+
+  function submit() {
+    if (!request || !changed) return
+
+    run(
+      () =>
+        updateStatusAction({
+          requestId: request.id,
+          status,
+          note: note.trim() || undefined,
+        }),
+      true,
+    )
+  }
+
+  function assign(assigneeId: string | null) {
+    if (!request) return
+    run(() => assignRequestAction({ requestId: request.id, assigneeId }), false)
   }
 
   return (
@@ -106,6 +142,16 @@ export function RequestDetailDialog({
               <Field
                 label="Submitted"
                 value={format(new Date(request.created_at), "d MMM yyyy 'at' h:mm a")}
+              />
+              <Field
+                label="Assigned to"
+                value={
+                  request.assignee
+                    ? request.assigned_to === actor.id
+                      ? `${displayName(request.assignee)} (you)`
+                      : displayName(request.assignee)
+                    : 'Unassigned'
+                }
               />
             </dl>
 
@@ -158,49 +204,110 @@ export function RequestDetailDialog({
           <Separator orientation="vertical" className="hidden lg:block" />
 
           <div className="space-y-4 rounded-lg border bg-muted/30 p-4 lg:border-0 lg:bg-transparent lg:p-0">
-            <p className="text-sm font-semibold">Update status</p>
-
             <div className="space-y-2">
-              <Label htmlFor="status">New status</Label>
-              <Select value={status} onValueChange={(value) => setStatus(value as RequestStatus)}>
-                <SelectTrigger id="status">
-                  <SelectValue placeholder="Select a status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_STATUSES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {STATUS_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <p className="text-sm font-semibold">Assignment</p>
 
-            <div className="space-y-2">
-              <Label htmlFor="note">Note for the requester</Label>
-              <Textarea
-                id="note"
-                rows={4}
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="Optional — included in the email they receive"
-              />
-            </div>
-
-            <Button className="w-full" disabled={!changed || pending} onClick={submit}>
-              {pending ? (
+              {mayReassign ? (
+                <Select
+                  value={request.assigned_to ?? UNASSIGNED}
+                  disabled={pending}
+                  onValueChange={(value) => assign(value === UNASSIGNED ? null : value)}
+                >
+                  <SelectTrigger id="assignee" aria-label="Assign to">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                    {staff.map((person) => (
+                      <SelectItem key={person.id} value={person.id}>
+                        {displayName(person)}
+                        {person.id === actor.id ? ' (you)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : mayClaim ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving…
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    disabled={pending}
+                    onClick={() => assign(actor.id)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Claim this request
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Claim it to take ownership and update its status.
+                  </p>
                 </>
               ) : (
-                'Save and notify'
+                <p className="text-xs text-muted-foreground">
+                  {request.assignee
+                    ? request.assigned_to === actor.id
+                      ? 'This request is yours. Ask an admin to hand it over.'
+                      : `${displayName(request.assignee)} is handling this. Ask an admin to reassign it.`
+                    : 'Ask an admin to assign this request.'}
+                </p>
               )}
-            </Button>
+            </div>
 
-            <p className="text-xs text-muted-foreground">
-              Saving emails the requester and adds an entry to their tracking timeline.
-            </p>
+            <Separator />
+
+            <p className="text-sm font-semibold">Update status</p>
+
+            {nextStatuses.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {blockReason ?? 'There are no status changes available for this request.'}
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="status">New status</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(value) => setStatus(value as RequestStatus)}
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Select a status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {nextStatuses.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {STATUS_LABELS[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="note">Note for the requester</Label>
+                  <Textarea
+                    id="note"
+                    rows={4}
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    placeholder="Optional — included in the email they receive"
+                  />
+                </div>
+
+                <Button className="w-full" disabled={!changed || pending} onClick={submit}>
+                  {pending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    'Save and notify'
+                  )}
+                </Button>
+
+                <p className="text-xs text-muted-foreground">
+                  Saving emails the requester and adds an entry to their tracking timeline.
+                </p>
+              </>
+            )}
           </div>
         </div>
       </DialogContent>

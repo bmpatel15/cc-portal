@@ -1,6 +1,7 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getPublicEnv } from '@/lib/env'
+import type { ProfileRow } from '@/lib/supabase/types'
 
 type CookiesToSet = Parameters<SetAllCookies>[0]
 
@@ -28,8 +29,14 @@ export async function getServerClient() {
   })
 }
 
-/** The signed-in staff profile, or null. */
-export async function getCurrentProfile() {
+/**
+ * The signed-in staff profile, or null.
+ *
+ * A profile row is not on its own proof of access: the `handle_new_user` trigger
+ * creates one for anyone who completes a magic link. Callers must check
+ * `is_active` — the admin layout redirects, server actions refuse.
+ */
+export async function getCurrentProfile(): Promise<ProfileRow | null> {
   const supabase = await getServerClient()
 
   const {
@@ -40,9 +47,9 @@ export async function getCurrentProfile() {
 
   const { data } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, created_at')
+    .select('id, email, full_name, role, is_active, created_at')
     .eq('id', user.id)
     .maybeSingle()
 
-  return data
+  return (data as ProfileRow | null) ?? null
 }
