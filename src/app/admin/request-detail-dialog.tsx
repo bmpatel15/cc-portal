@@ -1,0 +1,218 @@
+'use client'
+
+import * as React from 'react'
+import { format } from 'date-fns'
+import { ExternalLink, FileText, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { RequestTimeline } from '@/components/request-timeline'
+import { StatusBadge } from '@/components/status-badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { STATUS_LABELS, TEAM_LABELS, formatDetails } from '@/lib/schemas/labels'
+import { REQUEST_STATUSES, type RequestStatus } from '@/lib/schemas/request'
+import { referenceCode } from '@/lib/notifications/templates'
+import type { RequestWithRelations } from '@/lib/supabase/types'
+
+import { updateStatusAction } from './actions'
+
+export function RequestDetailDialog({
+  request,
+  onClose,
+  onUpdated,
+}: {
+  request: RequestWithRelations | null
+  onClose: () => void
+  onUpdated: () => void
+}) {
+  const [status, setStatus] = React.useState<RequestStatus | ''>('')
+  const [note, setNote] = React.useState('')
+  const [pending, startTransition] = React.useTransition()
+
+  // Reset the form whenever a different request is opened.
+  React.useEffect(() => {
+    setStatus(request?.status ?? '')
+    setNote('')
+  }, [request?.id, request?.status])
+
+  if (!request) return null
+
+  const details = formatDetails(request.team, request.details)
+  const changed = status !== '' && status !== request.status
+
+  function submit() {
+    if (!request || !changed) return
+
+    startTransition(async () => {
+      const result = await updateStatusAction({
+        requestId: request.id,
+        status,
+        note: note.trim() || undefined,
+      })
+
+      if (result.success) {
+        toast.success(result.message)
+        onUpdated()
+        onClose()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  return (
+    <Dialog open={Boolean(request)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-start justify-between gap-4 pr-6">
+            <div className="min-w-0">
+              <DialogTitle className="break-anywhere">{request.event_name}</DialogTitle>
+              <DialogDescription>
+                {TEAM_LABELS[request.team]} · Reference{' '}
+                <span className="font-mono">{referenceCode(request.id)}</span>
+              </DialogDescription>
+            </div>
+            <StatusBadge status={request.status} className="shrink-0" />
+          </div>
+        </DialogHeader>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_auto_18rem]">
+          <div className="space-y-5">
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <Field label="Requester" value={request.full_name} />
+              <Field label="Department" value={request.department} />
+              <Field label="Email" value={request.email} />
+              {request.phone ? <Field label="Phone" value={request.phone} /> : null}
+              <Field
+                label="Event date"
+                value={format(new Date(request.event_datetime), "d MMM yyyy 'at' h:mm a")}
+              />
+              <Field
+                label="Submitted"
+                value={format(new Date(request.created_at), "d MMM yyyy 'at' h:mm a")}
+              />
+            </dl>
+
+            {details.length > 0 ? (
+              <>
+                <Separator />
+                <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                  {details.map((entry) => (
+                    <Field key={entry.key} label={entry.label} value={entry.value} />
+                  ))}
+                </dl>
+              </>
+            ) : null}
+
+            {request.request_files.length > 0 ? (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Files</p>
+                  <ul className="space-y-1.5">
+                    {request.request_files.map((file) => (
+                      <li key={file.id}>
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="break-anywhere inline-flex items-center gap-2 text-sm font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0" />
+                          {file.name}
+                          <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            ) : null}
+
+            <Separator />
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Progress</p>
+              <RequestTimeline
+                status={request.status}
+                history={request.request_status_history ?? []}
+              />
+            </div>
+          </div>
+
+          <Separator orientation="vertical" className="hidden lg:block" />
+
+          <div className="space-y-4 rounded-lg border bg-muted/30 p-4 lg:border-0 lg:bg-transparent lg:p-0">
+            <p className="text-sm font-semibold">Update status</p>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">New status</Label>
+              <Select value={status} onValueChange={(value) => setStatus(value as RequestStatus)}>
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select a status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REQUEST_STATUSES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {STATUS_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="note">Note for the requester</Label>
+              <Textarea
+                id="note"
+                rows={4}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Optional — included in the email they receive"
+              />
+            </div>
+
+            <Button className="w-full" disabled={!changed || pending} onClick={submit}>
+              {pending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                'Save and notify'
+              )}
+            </Button>
+
+            <p className="text-xs text-muted-foreground">
+              Saving emails the requester and adds an entry to their tracking timeline.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-0.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="break-anywhere text-sm font-medium">{value}</dd>
+    </div>
+  )
+}
