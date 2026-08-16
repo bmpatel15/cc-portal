@@ -25,12 +25,12 @@ type Mode = 'password' | 'link'
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader subtitle="Staff sign in" />
+      <SiteHeader subtitle="Team sign in" />
 
       <main className="flex flex-1 items-center justify-center bg-muted/30 px-4 py-10">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Staff sign in</CardTitle>
+            <CardTitle>Team sign in</CardTitle>
             <CardDescription>
               Only approved staff accounts can open the dashboard.
             </CardDescription>
@@ -214,7 +214,7 @@ function SignInForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">Work email</Label>
+        <Label htmlFor="email">Email address</Label>
         <Input
           id="email"
           type="email"

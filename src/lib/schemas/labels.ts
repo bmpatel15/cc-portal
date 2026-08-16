@@ -14,6 +14,13 @@ export const TEAM_LABELS: Record<Team, string> = {
   'content-creation': 'Content Creation',
 }
 
+/** One line per team for the landing page, drawn from what each one actually asks for. */
+export const TEAM_DESCRIPTIONS: Record<Team, string> = {
+  audio: 'Microphones, speakers, and sound for your event.',
+  'photo-video': 'Photographers, videographers, and edited deliverables.',
+  'content-creation': 'Graphics, social posts, video briefs, and print.',
+}
+
 export const STATUS_LABELS: Record<RequestStatus, string> = {
   pending: 'Pending',
   in_progress: 'In Progress',

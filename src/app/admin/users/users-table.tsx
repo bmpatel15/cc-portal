@@ -217,7 +217,7 @@ function InviteForm() {
       <CardContent>
         <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-2">
-            <Label htmlFor="invite-email">Work email</Label>
+            <Label htmlFor="invite-email">Email address</Label>
             <Input
               id="invite-email"
               type="email"

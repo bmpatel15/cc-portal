@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Content Request Portal">
+  <!-- Brand blue matches --primary (222 84% 55%) so the tab icon reads as part
+       of the app, and stays visible against both light and dark tab bars. -->
+  <rect width="32" height="32" rx="7" fill="#2B62EB"/>
+  <!-- A play glyph: the one mark that covers Audio and Photo/Video at 16px,
+       where anything more detailed turns to mush. -->
+  <path
+    d="M12.6 9.9v12.2a1.1 1.1 0 0 0 1.68.94l9.36-6.1a1.1 1.1 0 0 0 0-1.88l-9.36-6.1a1.1 1.1 0 0 0-1.68.94Z"
+    fill="#fff"
+  />
+</svg>
