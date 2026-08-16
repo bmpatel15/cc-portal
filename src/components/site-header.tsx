@@ -6,16 +6,20 @@ export function SiteHeader({
   title = 'Content Request Portal',
   subtitle,
   action,
+  // Signed-in areas pass their own home so the title does not drop staff back
+  // onto the public landing page, which reads as having been signed out.
+  homeHref = '/',
 }: {
   title?: string
   subtitle?: string
   action?: React.ReactNode
+  homeHref?: string
 }) {
   return (
     <header className="bg-[#1C2127]">
       <div className="container mx-auto flex items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
         <div className="min-w-0">
-          <Link href="/" className="block">
+          <Link href={homeHref} className="block">
             <h1 className="truncate text-lg font-semibold tracking-tight text-white sm:text-xl">
               {title}
             </h1>

@@ -1,9 +1,10 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { Loader2, UserPlus } from 'lucide-react'
+import { ArrowLeft, Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +75,13 @@ export function UsersTable({
 
   return (
     <div className="space-y-5">
+      <Button asChild variant="ghost" size="sm" className="-ml-2">
+        <Link href="/admin">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to the dashboard
+        </Link>
+      </Button>
+
       <InviteForm />
 
       <Card>

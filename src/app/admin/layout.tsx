@@ -30,6 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <SiteHeader
         title="Request Dashboard"
         subtitle={profile.email}
+        homeHref="/admin"
         action={
           <>
             {isAdmin ? (

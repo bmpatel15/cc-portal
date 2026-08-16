@@ -63,7 +63,7 @@ export function PasswordForm({ email }: { email: string }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader title="Account" subtitle={email} />
+      <SiteHeader title="Account" subtitle={email} homeHref="/admin" />
 
       <main className="flex flex-1 items-center justify-center bg-muted/30 px-4 py-10">
         <Card className="w-full max-w-md">
