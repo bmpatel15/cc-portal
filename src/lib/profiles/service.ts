@@ -50,6 +50,10 @@ export async function inviteStaff(values: Invite, actor: Actor): Promise<void> {
 
   const supabase = getAdminClient()
 
+  // `redirectTo` only applies to the default `{{ .ConfirmationURL }}` template,
+  // which returns the session in a URL fragment the server cannot read. The
+  // Invite template must instead point at /auth/confirm with a token hash —
+  // see the comment in src/app/auth/confirm/route.ts.
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(values.email, {
     redirectTo: authCallbackUrl('/account/password'),
   })

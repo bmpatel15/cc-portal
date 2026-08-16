@@ -1,23 +1,16 @@
 import { NextResponse } from 'next/server'
 
+import { safeNext } from '@/lib/auth/redirect'
 import { getServerClient } from '@/lib/supabase/server'
 
 /**
- * Only same-site paths may be followed.
+ * Exchanges the emailed PKCE code for a session cookie, then lands where the
+ * flow asked for — the dashboard for a sign-in link, /account/password for a
+ * reset.
  *
- * `next` arrives in a link that lands in someone's inbox, so it is attacker-
- * controllable. A leading `//` (or `/\`) is protocol-relative and would send the
- * browser to another host once joined to the origin.
- */
-function safeNext(next: string | null): string {
-  if (!next || !next.startsWith('/')) return '/admin'
-  if (next.startsWith('//') || next.startsWith('/\\')) return '/admin'
-  return next
-}
-
-/**
- * Exchanges the emailed code for a session cookie, then lands where the flow
- * asked for — the dashboard for a sign-in link, /account/password for a reset.
+ * Only handles browser-initiated links, which carry a `code`. Admin-generated
+ * invites have no code_verifier and arrive as a token hash instead; those go to
+ * /auth/confirm.
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
