@@ -20,13 +20,24 @@ import {
 import { displayName } from '@/lib/profiles/display'
 import type { Actor } from '@/lib/requests/permissions'
 import { STATUS_LABELS, TEAM_LABELS } from '@/lib/schemas/labels'
-import { REQUEST_STATUSES, TEAMS, type RequestStatus, type Team } from '@/lib/schemas/request'
+import {
+  isClosed,
+  REQUEST_STATUSES,
+  TEAMS,
+  type RequestStatus,
+  type Team,
+} from '@/lib/schemas/request'
 import type { ProfileSummary, RequestWithRelations } from '@/lib/supabase/types'
 import { cn } from '@/lib/utils'
 
 import { RequestDetailDialog } from './request-detail-dialog'
 
-type StatusFilter = RequestStatus | 'all'
+/**
+ * `open` is everything still needing work, and it is where the board starts.
+ * Completed and cancelled requests are kept — the history matters, and an admin
+ * can reopen either — but they are not work, so they only appear when asked for.
+ */
+type StatusFilter = RequestStatus | 'all' | 'open'
 type OwnerFilter = 'all' | 'mine' | 'unassigned'
 
 export function RequestsBoard({
@@ -41,7 +52,7 @@ export function RequestsBoard({
   initialRequestId: string | null
 }) {
   const router = useRouter()
-  const [status, setStatus] = React.useState<StatusFilter>('all')
+  const [status, setStatus] = React.useState<StatusFilter>('open')
   const [team, setTeam] = React.useState<Team | 'all'>('all')
   const [owner, setOwner] = React.useState<OwnerFilter>('all')
   const [search, setSearch] = React.useState('')
@@ -50,29 +61,45 @@ export function RequestsBoard({
   const counts = React.useMemo(() => {
     const base: Record<StatusFilter, number> = {
       all: requests.length,
+      open: 0,
       pending: 0,
       in_progress: 0,
       review: 0,
       complete: 0,
       cancelled: 0,
     }
-    for (const request of requests) base[request.status] += 1
+    for (const request of requests) {
+      base[request.status] += 1
+      if (!isClosed(request.status)) base.open += 1
+    }
     return base
   }, [requests])
 
-  const ownerCounts = React.useMemo(
-    () => ({
-      mine: requests.filter((request) => request.assigned_to === actor.id).length,
-      unassigned: requests.filter((request) => !request.assigned_to).length,
-    }),
-    [requests, actor.id],
+  const matchesStatus = React.useCallback(
+    (request: RequestWithRelations) => {
+      if (status === 'all') return true
+      if (status === 'open') return !isClosed(request.status)
+      return request.status === status
+    },
+    [status],
   )
+
+  // Scoped to the status filter, so "Unassigned (3)" cannot promise three pieces
+  // of work when two of them are finished.
+  const ownerCounts = React.useMemo(() => {
+    const inScope = requests.filter(matchesStatus)
+
+    return {
+      mine: inScope.filter((request) => request.assigned_to === actor.id).length,
+      unassigned: inScope.filter((request) => !request.assigned_to).length,
+    }
+  }, [requests, matchesStatus, actor.id])
 
   const visible = React.useMemo(() => {
     const term = search.trim().toLowerCase()
 
     return requests.filter((request) => {
-      if (status !== 'all' && request.status !== status) return false
+      if (!matchesStatus(request)) return false
       if (team !== 'all' && request.team !== team) return false
       if (owner === 'mine' && request.assigned_to !== actor.id) return false
       if (owner === 'unassigned' && request.assigned_to) return false
@@ -83,7 +110,7 @@ export function RequestsBoard({
         .toLowerCase()
         .includes(term)
     })
-  }, [requests, status, team, owner, search, actor.id])
+  }, [requests, matchesStatus, team, owner, search, actor.id])
 
   const selected = requests.find((request) => request.id === selectedId) ?? null
 
@@ -95,11 +122,11 @@ export function RequestsBoard({
             key={key}
             role="button"
             tabIndex={0}
-            onClick={() => setStatus(status === key ? 'all' : key)}
+            onClick={() => setStatus(status === key ? 'open' : key)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
-                setStatus(status === key ? 'all' : key)
+                setStatus(status === key ? 'open' : key)
               }
             }}
             className={cn(
@@ -155,23 +182,37 @@ export function RequestsBoard({
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={status === 'all'} onClick={() => setStatus('all')}>
-              All ({counts.all})
+            <FilterChip active={status === 'open'} onClick={() => setStatus('open')}>
+              Open ({counts.open})
             </FilterChip>
             {REQUEST_STATUSES.map((value) => (
               <FilterChip key={value} active={status === value} onClick={() => setStatus(value)}>
                 {STATUS_LABELS[value]} ({counts[value]})
               </FilterChip>
             ))}
+            <FilterChip active={status === 'all'} onClick={() => setStatus('all')}>
+              All ({counts.all})
+            </FilterChip>
           </div>
 
           {visible.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-14 text-center">
               <Inbox className="h-8 w-8 text-muted-foreground" />
-              <p className="text-sm font-medium">No requests match these filters</p>
-              <p className="text-xs text-muted-foreground">
-                Try clearing the search or picking a different status.
-              </p>
+              {status === 'open' && counts.open === 0 && counts.all > 0 ? (
+                <>
+                  <p className="text-sm font-medium">Nothing open right now</p>
+                  <p className="text-xs text-muted-foreground">
+                    Every request has been completed or cancelled — pick All to see them.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">No requests match these filters</p>
+                  <p className="text-xs text-muted-foreground">
+                    Try clearing the search or picking a different status.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <Table>
@@ -230,7 +271,7 @@ export function RequestsBoard({
                           setSelectedId(request.id)
                         }}
                       >
-                        Open
+                        View
                       </Button>
                     </TableCell>
                   </TableRow>

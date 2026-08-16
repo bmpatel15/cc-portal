@@ -36,6 +36,19 @@ export const STATUS_PIPELINE = [
   'complete',
 ] as const satisfies readonly RequestStatus[]
 
+/**
+ * Statuses that take a request off the board.
+ *
+ * Neither is a dead end — an admin can reopen either — but a request in one of
+ * these needs nothing from the team, so the dashboard leaves it out until it is
+ * asked for by name.
+ */
+export const CLOSED_STATUSES = ['complete', 'cancelled'] as const satisfies readonly RequestStatus[]
+
+export function isClosed(status: RequestStatus): boolean {
+  return (CLOSED_STATUSES as readonly RequestStatus[]).includes(status)
+}
+
 const yesNo = z.enum(['yes', 'no'])
 export type YesNo = z.infer<typeof yesNo>
 
