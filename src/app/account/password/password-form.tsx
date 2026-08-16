@@ -37,16 +37,28 @@ export function PasswordForm({ email }: { email: string }) {
     if (password !== confirm) return setError('The two passwords do not match')
 
     setBusy(true)
-    const { error: updateError } = await getBrowserClient().auth.updateUser({ password })
-    setBusy(false)
 
-    if (updateError) return setError(updateError.message)
+    try {
+      const { error: updateError } = await getBrowserClient().auth.updateUser({ password })
 
-    toast.success('Password saved. You can sign in with it from now on.')
-    setPassword('')
-    setConfirm('')
-    router.push('/admin')
-    router.refresh()
+      if (updateError) return setError(updateError.message)
+
+      toast.success('Password saved. You can sign in with it from now on.')
+      setPassword('')
+      setConfirm('')
+      router.push('/admin')
+      router.refresh()
+    } catch (thrown) {
+      // Never let a throw strand the button in its loading state with no message.
+      const message = thrown instanceof Error ? thrown.message : String(thrown)
+      setError(
+        /supabaseKey|supabaseUrl|is required/i.test(message)
+          ? 'This site is missing its Supabase configuration. If you are the owner, check the NEXT_PUBLIC_SUPABASE_* environment variables and redeploy.'
+          : message,
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (

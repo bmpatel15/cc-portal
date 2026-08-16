@@ -99,11 +99,38 @@ function SignInForm() {
     return next ? `${base}?next=${encodeURIComponent(next)}` : base
   }
 
+  /**
+   * Anything thrown in here has to land in `error`, never escape.
+   *
+   * An unhandled rejection leaves `busy` true forever, so the form spins with
+   * nothing to read — which is exactly what a missing NEXT_PUBLIC_SUPABASE_ANON_KEY
+   * looks like, since createBrowserClient throws before any request is sent.
+   */
+  function describe(thrown: unknown): string {
+    const message = thrown instanceof Error ? thrown.message : String(thrown)
+    if (/supabaseKey|supabaseUrl|is required/i.test(message)) {
+      return 'This site is missing its Supabase configuration. If you are the owner, check the NEXT_PUBLIC_SUPABASE_* environment variables and redeploy.'
+    }
+    if (/fetch|network/i.test(message)) {
+      return 'Could not reach the server. Check your connection and try again.'
+    }
+    return message
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setBusy(true)
     setError(null)
 
+    try {
+      await attempt()
+    } catch (thrown) {
+      setBusy(false)
+      setError(describe(thrown))
+    }
+  }
+
+  async function attempt() {
     const supabase = getBrowserClient()
 
     if (mode === 'link') {
@@ -154,13 +181,18 @@ function SignInForm() {
     setBusy(true)
     setError(null)
 
-    const { error: resetError } = await getBrowserClient().auth.resetPasswordForEmail(email, {
-      redirectTo: callbackUrl('/account/password'),
-    })
+    try {
+      const { error: resetError } = await getBrowserClient().auth.resetPasswordForEmail(email, {
+        redirectTo: callbackUrl('/account/password'),
+      })
 
-    setBusy(false)
-    if (resetError) return setError(resetError.message)
-    setSent('reset')
+      if (resetError) return setError(resetError.message)
+      setSent('reset')
+    } catch (thrown) {
+      setError(describe(thrown))
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (sent) {
