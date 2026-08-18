@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { signUploadSchema } from '@/lib/schemas/request'
+import { ALLOWED_FILE_LABEL, signUploadSchema } from '@/lib/schemas/request'
 import { STORAGE_BUCKET, getAdminClient } from '@/lib/supabase/admin'
-import { sanitizeFileName } from '@/lib/files'
+import { resolveFileType, sanitizeFileName } from '@/lib/files'
 
 export const runtime = 'nodejs'
 
@@ -28,7 +28,20 @@ export async function POST(request: Request) {
     )
   }
 
-  const { fileName, contentType } = parsed.data
+  const { fileName } = parsed.data
+
+  // Derived from the name, never from the client's claim: this route is
+  // unauthenticated, so a supplied contentType proves nothing about the file it
+  // names, and the browser's own value is unreliable for Word documents anyway.
+  const contentType = resolveFileType(fileName)
+
+  if (!contentType) {
+    return NextResponse.json(
+      { success: false, message: `Upload a ${ALLOWED_FILE_LABEL} file` },
+      { status: 422 },
+    )
+  }
+
   const path = `files/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${sanitizeFileName(fileName)}`
 
   const { data, error } = await getAdminClient()

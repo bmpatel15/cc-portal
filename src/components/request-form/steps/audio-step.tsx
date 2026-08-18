@@ -5,6 +5,7 @@ import { useWatch } from 'react-hook-form'
 import { AUDIO_LOCATIONS } from '@/lib/schemas/request'
 
 import { NumberField, RadioField, SelectField, TextAreaField } from '../fields'
+import { FileUpload } from '../file-upload'
 import { REVEAL_CLASS, YES_NO, choicesFrom } from './choices'
 
 export function AudioStep() {
@@ -72,6 +73,11 @@ export function AudioStep() {
         name="details.audioDescription"
         label="Additional notes"
         placeholder="Anything else the audio team should know"
+      />
+
+      <FileUpload
+        label="Reference files"
+        description="Optional — stage plots, run sheets, or a rough sketch of the setup."
       />
     </div>
   )

@@ -83,10 +83,21 @@ export function ContentCreationStep() {
             <NumberField name="details.width" label="Width (inches)" required min={0} step="0.1" />
             <NumberField name="details.height" label="Height (inches)" required min={0} step="0.1" />
           </div>
-
-          <FileUpload required />
         </div>
       ) : null}
+
+      {/* One instance for the whole step: FileUpload binds the shared `files`
+          field, so a second copy inside the printing branch would render a
+          duplicate list writing to the same array. */}
+      <FileUpload
+        label={contentType === 'printing' ? 'Upload artwork' : 'Reference files'}
+        required={contentType === 'printing'}
+        description={
+          contentType === 'printing'
+            ? 'The team needs the artwork to produce your print job.'
+            : 'Optional — rough drawings, sketches, or examples of what you have in mind.'
+        }
+      />
     </div>
   )
 }

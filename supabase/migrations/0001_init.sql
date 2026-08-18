@@ -236,13 +236,22 @@ create policy "staff read notifications" on public.notification_log
 /* -------------------------------------------------------------------------- */
 
 -- The bucket already exists in this project; this keeps a fresh environment in sync.
+-- The mime list is kept identical to 0004_word_uploads.sql: the on-conflict
+-- clause below is a declarative sync, so a stale array here would silently
+-- revert 0004 the next time this file is re-run.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'cc-portal',
   'cc-portal',
   true,
   104857600, -- 100MB
-  array['image/jpeg', 'image/png', 'application/pdf']
+  array[
+    'image/jpeg',
+    'image/png',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ]
 )
 on conflict (id) do update
   set public = excluded.public,

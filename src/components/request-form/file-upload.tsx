@@ -7,10 +7,11 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { resolveFileType } from '@/lib/files'
 import { getBrowserClient } from '@/lib/supabase/client'
 import {
   ALLOWED_FILE_EXTENSIONS,
-  ALLOWED_FILE_TYPES,
+  ALLOWED_FILE_LABEL,
   MAX_FILE_BYTES,
   type UploadedFile,
 } from '@/lib/schemas/request'
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils'
 import type { RequestFormValues } from './form-model'
 
 const BUCKET = 'cc-portal'
+const DEFAULT_HINT = `${ALLOWED_FILE_LABEL} · up to 100MB each`
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -30,7 +32,17 @@ function formatSize(bytes: number): string {
  * Uploads go straight from the browser to Supabase Storage using a short-lived
  * signed URL, so a 100MB artwork file never streams through the app server.
  */
-export function FileUpload({ label = 'Upload artwork', required }: { label?: string; required?: boolean }) {
+export function FileUpload({
+  label = 'Upload artwork',
+  required,
+  hint = DEFAULT_HINT,
+  description,
+}: {
+  label?: string
+  required?: boolean
+  hint?: string
+  description?: string
+}) {
   const form = useFormContext<RequestFormValues>()
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = React.useState(false)
@@ -45,15 +57,17 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
       return null
     }
 
-    if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
-      toast.error(`${file.name} must be a JPG, PNG, or PDF`)
+    const contentType = resolveFileType(file.name)
+
+    if (!contentType) {
+      toast.error(`${file.name} must be a ${ALLOWED_FILE_LABEL} file`)
       return null
     }
 
     const response = await fetch('/api/uploads/sign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size }),
+      body: JSON.stringify({ fileName: file.name, contentType, size: file.size }),
     })
 
     const signed = await response.json()
@@ -63,9 +77,17 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
       return null
     }
 
+    // uploadToSignedUrl ignores its contentType option for Blob bodies — it
+    // posts the file as multipart, and Storage checks the *part's* type, which
+    // the browser copies from File.type. Re-wrapping is the only way to correct
+    // it. new File([file], ...) references the same bytes, so a 100MB upload is
+    // not buffered here.
+    const payload =
+      file.type === contentType ? file : new File([file], file.name, { type: contentType })
+
     const { error: uploadError } = await getBrowserClient()
       .storage.from(BUCKET)
-      .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type })
+      .uploadToSignedUrl(signed.path, signed.token, payload, { contentType })
 
     if (uploadError) {
       toast.error(`Upload failed for ${file.name}: ${uploadError.message}`)
@@ -76,7 +98,7 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
       name: file.name,
       path: signed.path,
       size: file.size,
-      contentType: file.type as UploadedFile['contentType'],
+      contentType,
     }
   }
 
@@ -91,7 +113,9 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
       const uploaded = results.filter((result): result is UploadedFile => result !== null)
 
       if (uploaded.length > 0) {
-        form.setValue('files', [...files, ...uploaded].slice(0, 10))
+        // Read at write time, not from the render closure: two overlapping drops
+        // would otherwise clobber each other's additions.
+        form.setValue('files', [...(form.getValues('files') ?? []), ...uploaded].slice(0, 10))
         toast.success(uploaded.length === 1 ? 'File uploaded' : `${uploaded.length} files uploaded`)
       }
     } finally {
@@ -103,7 +127,7 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
   function removeFile(path: string) {
     form.setValue(
       'files',
-      files.filter((file) => file.path !== path),
+      (form.getValues('files') ?? []).filter((file) => file.path !== path),
     )
   }
 
@@ -154,7 +178,7 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
             </button>
           ) : null}
         </p>
-        <p className="text-xs text-muted-foreground">JPG, PNG, or PDF · up to 100MB each</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
 
         <input
           ref={inputRef}
@@ -193,9 +217,7 @@ export function FileUpload({ label = 'Upload artwork', required }: { label?: str
         </ul>
       ) : null}
 
-      <p className="text-xs text-muted-foreground">
-        The team needs the artwork to produce your print job.
-      </p>
+      {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       {error ? <p className="text-xs font-medium text-destructive">{error}</p> : null}
     </div>
   )

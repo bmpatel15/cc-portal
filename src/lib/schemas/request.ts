@@ -61,15 +61,28 @@ const count = (message: string, min = 0) =>
 /* -------------------------------------------------------------------------- */
 
 export const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100MB
-export const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'application/pdf'] as const
-export const ALLOWED_FILE_EXTENSIONS = '.jpg,.jpeg,.png,.pdf'
+
+/** Keep in sync with the bucket's allowed_mime_types in supabase/migrations. */
+export const ALLOWED_FILE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'application/pdf',
+  'application/msword', // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+] as const
+export type AllowedFileType = (typeof ALLOWED_FILE_TYPES)[number]
+
+export const ALLOWED_FILE_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.doc,.docx'
+
+/** One phrasing for the accept list, so UI copy and zod messages cannot drift. */
+export const ALLOWED_FILE_LABEL = 'JPG, PNG, PDF, or Word'
 
 export const uploadedFileSchema = z.object({
   name: requiredText('File name is required'),
   path: requiredText('File path is required'),
   size: z.number().int().min(0).max(MAX_FILE_BYTES, 'File exceeds the 100MB limit'),
   contentType: z.enum(ALLOWED_FILE_TYPES, {
-    errorMap: () => ({ message: 'Only JPG, PNG, and PDF files are supported' }),
+    errorMap: () => ({ message: `Upload a ${ALLOWED_FILE_LABEL} file` }),
   }),
 })
 export type UploadedFile = z.infer<typeof uploadedFileSchema>
@@ -373,9 +386,8 @@ export type Assignment = z.infer<typeof assignmentSchema>
 
 export const signUploadSchema = z.object({
   fileName: requiredText('File name is required'),
-  contentType: z.enum(ALLOWED_FILE_TYPES, {
-    errorMap: () => ({ message: 'Only JPG, PNG, and PDF files are supported' }),
-  }),
+  /** Advisory only — the route derives the real type from `fileName`. */
+  contentType: z.string().trim().optional(),
   size: z.number().int().min(1).max(MAX_FILE_BYTES, 'File exceeds the 100MB limit'),
 })
 export type SignUploadInput = z.infer<typeof signUploadSchema>

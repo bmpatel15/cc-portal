@@ -5,6 +5,7 @@ import { useWatch } from 'react-hook-form'
 import { PHOTO_PURPOSES, VIDEO_FORMATS, VIDEO_TYPES } from '@/lib/schemas/request'
 
 import { NumberField, RadioField, SelectField, TextAreaField, TextField } from '../fields'
+import { FileUpload } from '../file-upload'
 import { REVEAL_CLASS, YES_NO, choicesFrom } from './choices'
 
 export function PhotoVideoStep() {
@@ -99,6 +100,11 @@ export function PhotoVideoStep() {
           />
         </div>
       ) : null}
+
+      <FileUpload
+        label="Reference files"
+        description="Optional — shot lists, references, or a rough sketch of what you have in mind."
+      />
     </div>
   )
 }
