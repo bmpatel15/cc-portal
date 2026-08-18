@@ -34,6 +34,19 @@ const REQUEST_SELECT = `
   assignee:profiles!requests_assigned_to_fkey (id, email, full_name)
 `
 
+/**
+ * The staff view of a request, which additionally carries logged time.
+ *
+ * Deliberately separate from `REQUEST_SELECT`: that one also serves
+ * `getRequestByToken`, which backs the public tracking page. Logged hours are
+ * internal — how long a job took the team is not something a requester is
+ * shown — so they are only ever selected on the paths behind the login.
+ */
+const STAFF_REQUEST_SELECT = `
+  ${REQUEST_SELECT},
+  request_time_entries (*)
+`
+
 function toContext(
   request: RequestRow,
   files: Pick<RequestFileRow, 'name' | 'url'>[],
@@ -203,7 +216,7 @@ export interface ListFilters {
 export async function listRequests(filters: ListFilters = {}): Promise<RequestWithRelations[]> {
   let query = getAdminClient()
     .from('requests')
-    .select(REQUEST_SELECT)
+    .select(STAFF_REQUEST_SELECT)
     .order('created_at', { ascending: false })
     .limit(200)
 

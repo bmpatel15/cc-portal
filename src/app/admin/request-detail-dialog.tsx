@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { format } from 'date-fns'
-import { ExternalLink, FileText, Loader2, UserPlus } from 'lucide-react'
+import { Clock, ExternalLink, FileText, Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { RequestTimeline } from '@/components/request-timeline'
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -38,7 +39,7 @@ import {
 import { referenceCode } from '@/lib/notifications/templates'
 import type { ProfileSummary, RequestWithRelations } from '@/lib/supabase/types'
 
-import { assignRequestAction, updateStatusAction } from './actions'
+import { assignRequestAction, deleteTimeEntryAction, logTimeAction, updateStatusAction } from './actions'
 
 const UNASSIGNED = 'unassigned'
 
@@ -308,10 +309,176 @@ export function RequestDetailDialog({
                 </p>
               </>
             )}
+
+            <Separator />
+
+            <TimeLog
+              request={request}
+              actor={actor}
+              staff={staff}
+              pending={pending}
+              onRun={run}
+            />
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Hours worked on a request.
+ *
+ * Kept apart from the status timeline above it because the two measure
+ * different things: the timeline shows elapsed time, this shows effort. A
+ * request can sit for a fortnight and take twenty minutes, and the analytics
+ * page reports both without ever adding them together.
+ *
+ * Not shown on the public tracking page — `request_time_entries` is only
+ * selected on the staff paths.
+ */
+function TimeLog({
+  request,
+  actor,
+  staff,
+  pending,
+  onRun,
+}: {
+  request: RequestWithRelations
+  actor: Actor
+  staff: ProfileSummary[]
+  pending: boolean
+  onRun: (
+    action: () => Promise<{ success: boolean; message: string }>,
+    close: boolean,
+  ) => void
+}) {
+  const [hours, setHours] = React.useState('')
+  const [workNote, setWorkNote] = React.useState('')
+
+  React.useEffect(() => {
+    setHours('')
+    setWorkNote('')
+  }, [request.id])
+
+  const entries = [...(request.request_time_entries ?? [])].sort((a, b) =>
+    b.worked_on.localeCompare(a.worked_on),
+  )
+  const total = entries.reduce((sum, entry) => sum + Number(entry.hours), 0)
+
+  const parsed = Number(hours)
+  const valid = hours.trim() !== '' && Number.isFinite(parsed) && parsed > 0
+
+  const nameFor = (staffId: string | null) => {
+    if (!staffId) return 'Removed user'
+    if (staffId === actor.id) return 'You'
+    const person = staff.find((candidate) => candidate.id === staffId)
+    return person ? displayName(person) : 'Someone'
+  }
+
+  function submitHours() {
+    onRun(
+      () =>
+        logTimeAction({
+          requestId: request.id,
+          hours: parsed,
+          note: workNote.trim() || undefined,
+        }),
+      false,
+    )
+    setHours('')
+    setWorkNote('')
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-baseline justify-between">
+        <p className="text-sm font-semibold">Logged time</p>
+        {entries.length > 0 ? (
+          <span className="text-xs font-medium tabular-nums text-muted-foreground">
+            {Math.round(total * 10) / 10} h total
+          </span>
+        ) : null}
+      </div>
+
+      {entries.length > 0 ? (
+        <ul className="space-y-1.5">
+          {entries.map((entry) => (
+            <li key={entry.id} className="flex items-start justify-between gap-2 text-xs">
+              <div className="min-w-0">
+                <span className="font-medium tabular-nums">{Number(entry.hours)} h</span>
+                <span className="text-muted-foreground">
+                  {' · '}
+                  {nameFor(entry.staff_id)}
+                  {' · '}
+                  {format(new Date(`${entry.worked_on}T00:00:00`), 'd MMM')}
+                </span>
+                {entry.note ? (
+                  <p className="break-anywhere text-muted-foreground">{entry.note}</p>
+                ) : null}
+              </div>
+
+              {entry.staff_id === actor.id || actor.role === 'admin' ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => onRun(() => deleteTimeEntryAction({ entryId: entry.id }), false)}
+                  className="shrink-0 text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          No hours logged yet. This is effort, separate from how long the request has been open.
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <div className="w-24 space-y-1">
+          <Label htmlFor="hours" className="text-xs">
+            Hours
+          </Label>
+          <Input
+            id="hours"
+            type="number"
+            inputMode="decimal"
+            min="0.25"
+            max="24"
+            step="0.25"
+            value={hours}
+            disabled={pending}
+            onChange={(event) => setHours(event.target.value)}
+            placeholder="1.5"
+          />
+        </div>
+        <div className="flex-1 space-y-1">
+          <Label htmlFor="work-note" className="text-xs">
+            What was done
+          </Label>
+          <Input
+            id="work-note"
+            value={workNote}
+            disabled={pending}
+            onChange={(event) => setWorkNote(event.target.value)}
+            placeholder="Optional"
+          />
+        </div>
+      </div>
+
+      <Button
+        variant="secondary"
+        className="w-full"
+        disabled={!valid || pending}
+        onClick={submitHours}
+      >
+        <Clock className="h-4 w-4" />
+        Log time
+      </Button>
+    </div>
   )
 }
 

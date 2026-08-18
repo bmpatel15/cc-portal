@@ -71,6 +71,52 @@ export interface ProfileRow {
   created_at: string
 }
 
+export interface RequestTimeEntryRow {
+  id: string
+  request_id: string
+  staff_id: string | null
+  hours: number
+  note: string | null
+  worked_on: string
+  created_at: string
+}
+
+/**
+ * A row of `public.request_durations` (0003).
+ *
+ * Every `*_seconds` field is derived, never stored: the view recomputes them
+ * from `request_status_history` on read. Nulls are meaningful — a null
+ * `turnaround_seconds` means the request has not completed, not that it took no
+ * time — so callers must filter rather than coalesce to zero.
+ */
+export interface RequestDurationRow {
+  id: string
+  created_at: string
+  event_datetime: string
+  team: Team
+  department: string
+  status: RequestStatus
+  assigned_to: string | null
+  event_name: string
+  details: RequestDetails
+
+  first_pickup_at: string | null
+  first_complete_at: string | null
+  first_cancelled_at: string | null
+  transition_count: number
+
+  pending_seconds: number
+  in_progress_seconds: number
+  review_seconds: number
+
+  time_to_pickup_seconds: number | null
+  turnaround_seconds: number | null
+  lead_time_seconds: number
+
+  logged_hours: number | null
+  time_entry_count: number
+}
+
 /** Just enough of a profile to name someone in the UI. */
 export type ProfileSummary = Pick<ProfileRow, 'id' | 'email' | 'full_name'>
 
@@ -79,4 +125,11 @@ export interface RequestWithRelations extends RequestRow {
   request_files: RequestFileRow[]
   request_status_history: RequestStatusHistoryRow[]
   assignee: ProfileSummary | null
+
+  /**
+   * Only present on the staff paths. The public tracking page selects without
+   * it, so it is optional rather than an empty array — absent means "not
+   * loaded here", which is different from "none logged".
+   */
+  request_time_entries?: RequestTimeEntryRow[]
 }

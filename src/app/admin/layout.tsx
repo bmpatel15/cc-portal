@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
-import { KeyRound, Users } from 'lucide-react'
+import { ChartColumn, KeyRound, Users } from 'lucide-react'
 
 import { SiteHeader } from '@/components/site-header'
 import { Button } from '@/components/ui/button'
@@ -34,17 +34,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         action={
           <>
             {isAdmin ? (
-              <Button
-                asChild
-                variant="ghost"
-                size="sm"
-                className="text-white/80 hover:bg-white/10 hover:text-white"
-              >
-                <Link href="/admin/users">
-                  <Users className="h-4 w-4" />
-                  <span className="hidden sm:inline">Team</span>
-                </Link>
-              </Button>
+              <>
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  <Link href="/admin/analytics">
+                    <ChartColumn className="h-4 w-4" />
+                    <span className="hidden sm:inline">Analytics</span>
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  <Link href="/admin/users">
+                    <Users className="h-4 w-4" />
+                    <span className="hidden sm:inline">Team</span>
+                  </Link>
+                </Button>
+              </>
             ) : null}
             <Button
               asChild

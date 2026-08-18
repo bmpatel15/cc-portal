@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Inbox, Search } from 'lucide-react'
 
+import { FilterChip } from '@/components/filter-chip'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -290,30 +291,5 @@ export function RequestsBoard({
         onUpdated={() => router.refresh()}
       />
     </div>
-  )
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-        active
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-      )}
-    >
-      {children}
-    </button>
   )
 }
