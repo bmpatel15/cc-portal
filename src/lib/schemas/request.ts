@@ -133,9 +133,9 @@ export const contactFields = {
 
 export const eventFields = {
   eventName: requiredText('Event name is required'),
-  eventDateTime: requiredText('Event date and time are required').refine(
+  eventDate: requiredText('Event date is required').refine(
     (value) => !Number.isNaN(Date.parse(value)),
-    'Enter a valid date and time',
+    'Enter a valid date',
   ),
 }
 

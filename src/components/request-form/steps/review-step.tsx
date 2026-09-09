@@ -5,11 +5,11 @@ import { Pencil } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { TEAM_LABELS, formatDetails, formatEventDateTime } from '@/lib/schemas/labels'
+import { TEAM_LABELS, formatDetails, formatEventDate } from '@/lib/schemas/labels'
 import { pruneDetails, type RequestDetails, type Team } from '@/lib/schemas/request'
 
 import {
-  combineDateTime,
+  eventDateInstant,
   resolveDepartment,
   type RequestFormValues,
   type StepId,
@@ -20,11 +20,11 @@ interface Row {
   value: string
 }
 
-/** Blank until both halves are answered, so a half-filled row is not shown. */
-function formatEventInstant(date: string, time: string): string {
-  const instant = combineDateTime(date, time)
+/** Blank until a day is picked, so an unanswered row is not shown. */
+function formatEventDay(date: string): string {
+  const instant = eventDateInstant(date)
 
-  return instant ? formatEventDateTime(instant) : ''
+  return instant ? formatEventDate(instant) : ''
 }
 
 function Section({
@@ -76,10 +76,7 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: StepId) => void 
 
   const eventRows: Row[] = [
     { label: 'Event name', value: values.eventName },
-    {
-      label: 'Event date and time',
-      value: formatEventInstant(values.eventDate, values.eventTime),
-    },
+    { label: 'Event date', value: formatEventDay(values.eventDate) },
     ...(values.team ? [{ label: 'Team', value: TEAM_LABELS[values.team as Team] }] : []),
   ].filter((row) => row.value)
 

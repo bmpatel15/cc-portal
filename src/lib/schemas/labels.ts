@@ -182,11 +182,25 @@ export function formatDetails(team: Team, details: RequestDetails): DetailEntry[
     .filter((entry) => entry.value !== '')
 }
 
-export function formatEventDateTime(value: string): string {
+/**
+ * The day of an event, everywhere it is shown.
+ *
+ * The form asks for a day and stores it at midnight UTC, so those rows are read
+ * back in UTC and every viewer sees the day that was picked. Rows from the older
+ * form carry a real time of day, entered and shown in local time; reading one of
+ * those in UTC would roll an evening event onto the next day, so they keep the
+ * viewer's zone.
+ */
+export function formatEventDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('en-US', {
+
+  const dateOnly = date.getTime() % DAY_MS === 0
+
+  return date.toLocaleDateString('en-US', {
     dateStyle: 'medium',
-    timeStyle: 'short',
+    ...(dateOnly ? { timeZone: 'UTC' } : {}),
   })
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000

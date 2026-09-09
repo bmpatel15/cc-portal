@@ -22,7 +22,6 @@ export interface RequestFormValues {
   departmentOther: string
   eventName: string
   eventDate: string
-  eventTime: string
   team: Team | ''
   details: Record<string, string>
   files: UploadedFile[]
@@ -36,7 +35,6 @@ export const emptyFormValues: RequestFormValues = {
   departmentOther: '',
   eventName: '',
   eventDate: '',
-  eventTime: '',
   team: '',
   details: {},
   files: [],
@@ -44,7 +42,7 @@ export const emptyFormValues: RequestFormValues = {
 
 /**
  * Drop blank answers so optional fields read as absent rather than as an empty
- * string, and fold the split date and time back into a single instant.
+ * string, and turn the picked day into the instant the API stores.
  */
 export function cleanValues(values: RequestFormValues) {
   const details: Record<string, string> = {}
@@ -61,7 +59,7 @@ export function cleanValues(values: RequestFormValues) {
     phone: values.phone,
     department: resolveDepartment(values.department, values.departmentOther),
     eventName: values.eventName,
-    eventDateTime: combineDateTime(values.eventDate, values.eventTime),
+    eventDate: eventDateInstant(values.eventDate),
     team: values.team || undefined,
     details,
     files: values.files ?? [],
@@ -80,22 +78,18 @@ export function resolveDepartment(department: string, other: string): string {
 }
 
 /**
- * The one instant the API takes, from the two boxes the form asks for.
+ * The instant the API takes, from the day the requestor picked.
  *
- * The date and the time are separate inputs because a single `datetime-local`
- * is fiddly to type into and renders differently in every browser. Nothing
- * downstream knows about the split -- it is joined here, and `event_datetime`
- * stays one column.
- *
- * Both halves are needed: a date without a time is not an instant, and the empty
- * string lets the schema report it as missing rather than inventing midnight.
+ * The form asks for a date and nothing more: a requestor booking weeks ahead
+ * usually does not know when the event starts yet, and a required time box made
+ * them invent one. The column downstream is still a timestamp, so the day is
+ * anchored at midnight UTC -- a fixed point that renders as the day that was
+ * picked in every time zone, which local midnight would not.
  */
-export function combineDateTime(date: string, time: string): string {
-  if (!date || !time) return ''
+export function eventDateInstant(date: string): string {
+  if (!date) return ''
 
-  // The joined value is naive local time, which is what the requestor meant;
-  // storing the true instant is what makes it comparable across time zones.
-  const parsed = new Date(`${date}T${time}`)
+  const parsed = new Date(`${date}T00:00:00Z`)
 
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString()
 }
@@ -127,19 +121,13 @@ export function validateValues(values: RequestFormValues): {
     message: issue.message,
   }))
 
-  // Two schema fields are assembled from more than one input, so an issue
-  // against either has no field to attach to and setError would drop it
-  // silently -- the wizard would refuse to advance while highlighting nothing.
-  // Both are pointed at the input the requestor can actually act on.
+  // `department` is the one schema field assembled from more than one input, so
+  // an issue against it has no field to attach to when "Other" is picked and
+  // setError would drop it silently -- the wizard would refuse to advance while
+  // highlighting nothing. It is pointed at the box the requestor can act on.
   const issues: ValidationIssue[] = []
-  let sawDateTime = false
 
   for (const issue of raw) {
-    if (issue.path === 'eventDateTime') {
-      sawDateTime = true
-      continue
-    }
-
     if (issue.path === 'department' && values.department === DEPARTMENT_OTHER) {
       issues.push({ path: 'departmentOther', message: 'Enter your department' })
       continue
@@ -147,8 +135,6 @@ export function validateValues(values: RequestFormValues): {
 
     issues.push(issue)
   }
-
-  if (sawDateTime) issues.push(...dateTimeIssues(values))
 
   // One message per input. An empty value can trip more than one check, and two
   // errors stacked under one box reads as two separate problems.
@@ -158,24 +144,6 @@ export function validateValues(values: RequestFormValues): {
     ok: false,
     issues: issues.filter((issue) => !seen.has(issue.path) && seen.add(issue.path)),
   }
-}
-
-/**
- * Which half of the event instant to complain about.
- *
- * With both halves filled the combined value parsed badly rather than being
- * absent, which is not something either input can be blamed for on its own; the
- * date is where the message reads most naturally.
- */
-function dateTimeIssues(values: RequestFormValues): ValidationIssue[] {
-  const issues: ValidationIssue[] = []
-
-  if (!values.eventDate) issues.push({ path: 'eventDate', message: 'Event date is required' })
-  if (!values.eventTime) issues.push({ path: 'eventTime', message: 'Event time is required' })
-
-  return issues.length > 0
-    ? issues
-    : [{ path: 'eventDate', message: 'Enter a valid date and time' }]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -207,7 +175,7 @@ export const STEPS: StepDefinition[] = [
     title: 'Event details',
     shortTitle: 'Event',
     description: 'What the request is for, and when it happens.',
-    owns: (path) => ['eventName', 'eventDate', 'eventTime'].includes(path),
+    owns: (path) => ['eventName', 'eventDate'].includes(path),
   },
   {
     id: 'team',

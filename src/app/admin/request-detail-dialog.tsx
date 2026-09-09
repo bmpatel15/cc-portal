@@ -28,7 +28,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { displayName } from '@/lib/profiles/display'
-import { STATUS_LABELS, TEAM_LABELS, formatDetails } from '@/lib/schemas/labels'
+import { STATUS_LABELS, TEAM_LABELS, formatDetails, formatEventDate } from '@/lib/schemas/labels'
 import { type RequestStatus } from '@/lib/schemas/request'
 import {
   allowedNextStatuses,
@@ -137,10 +137,7 @@ export function RequestDetailDialog({
               <Field label="Department" value={request.department} />
               <Field label="Email" value={request.email} />
               {request.phone ? <Field label="Phone" value={request.phone} /> : null}
-              <Field
-                label="Event date"
-                value={format(new Date(request.event_datetime), "d MMM yyyy 'at' h:mm a")}
-              />
+              <Field label="Event date" value={formatEventDate(request.event_datetime)} />
               <Field
                 label="Submitted"
                 value={format(new Date(request.created_at), "d MMM yyyy 'at' h:mm a")}
