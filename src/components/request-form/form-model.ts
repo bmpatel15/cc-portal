@@ -19,7 +19,8 @@ export interface RequestFormValues {
   phone: string
   department: string
   eventName: string
-  eventDateTime: string
+  eventDate: string
+  eventTime: string
   team: Team | ''
   details: Record<string, string>
   files: UploadedFile[]
@@ -31,7 +32,8 @@ export const emptyFormValues: RequestFormValues = {
   phone: '',
   department: '',
   eventName: '',
-  eventDateTime: '',
+  eventDate: '',
+  eventTime: '',
   team: '',
   details: {},
   files: [],
@@ -39,7 +41,7 @@ export const emptyFormValues: RequestFormValues = {
 
 /**
  * Drop blank answers so optional fields read as absent rather than as an empty
- * string, and normalise the naive datetime-local value to a real instant.
+ * string, and fold the split date and time back into a single instant.
  */
 export function cleanValues(values: RequestFormValues) {
   const details: Record<string, string> = {}
@@ -56,17 +58,32 @@ export function cleanValues(values: RequestFormValues) {
     phone: values.phone,
     department: values.department,
     eventName: values.eventName,
-    eventDateTime: values.eventDateTime ? toIsoInstant(values.eventDateTime) : '',
+    eventDateTime: combineDateTime(values.eventDate, values.eventTime),
     team: values.team || undefined,
     details,
     files: values.files ?? [],
   }
 }
 
-/** `datetime-local` yields a naive local string; store the true instant. */
-function toIsoInstant(value: string): string {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString()
+/**
+ * The one instant the API takes, from the two boxes the form asks for.
+ *
+ * The date and the time are separate inputs because a single `datetime-local`
+ * is fiddly to type into and renders differently in every browser. Nothing
+ * downstream knows about the split -- it is joined here, and `event_datetime`
+ * stays one column.
+ *
+ * Both halves are needed: a date without a time is not an instant, and the empty
+ * string lets the schema report it as missing rather than inventing midnight.
+ */
+export function combineDateTime(date: string, time: string): string {
+  if (!date || !time) return ''
+
+  // The joined value is naive local time, which is what the requestor meant;
+  // storing the true instant is what makes it comparable across time zones.
+  const parsed = new Date(`${date}T${time}`)
+
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString()
 }
 
 export interface ValidationIssue {
@@ -91,13 +108,39 @@ export function validateValues(values: RequestFormValues): {
     return { ok: true, data: values.team ? (result.data as RequestInput) : undefined, issues: [] }
   }
 
+  const raw = result.error.issues.map((issue) => ({
+    path: issue.path.join('.'),
+    message: issue.message,
+  }))
+
+  // `eventDateTime` is not a field on this form, so an issue against it has no
+  // input to attach to and would be silently dropped by setError. Point at
+  // whichever half is actually missing instead -- and collapse them, since an
+  // empty value trips both the required check and the parse check.
+  const others = raw.filter((issue) => issue.path !== 'eventDateTime')
+
   return {
     ok: false,
-    issues: result.error.issues.map((issue) => ({
-      path: issue.path.join('.'),
-      message: issue.message,
-    })),
+    issues: others.length === raw.length ? others : [...others, ...dateTimeIssues(values)],
   }
+}
+
+/**
+ * Which half of the event instant to complain about.
+ *
+ * With both halves filled the combined value parsed badly rather than being
+ * absent, which is not something either input can be blamed for on its own; the
+ * date is where the message reads most naturally.
+ */
+function dateTimeIssues(values: RequestFormValues): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  if (!values.eventDate) issues.push({ path: 'eventDate', message: 'Event date is required' })
+  if (!values.eventTime) issues.push({ path: 'eventTime', message: 'Event time is required' })
+
+  return issues.length > 0
+    ? issues
+    : [{ path: 'eventDate', message: 'Enter a valid date and time' }]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -128,7 +171,7 @@ export const STEPS: StepDefinition[] = [
     title: 'Event details',
     shortTitle: 'Event',
     description: 'What the request is for, and when it happens.',
-    owns: (path) => ['eventName', 'eventDateTime'].includes(path),
+    owns: (path) => ['eventName', 'eventDate', 'eventTime'].includes(path),
   },
   {
     id: 'team',

@@ -8,11 +8,18 @@ import { Separator } from '@/components/ui/separator'
 import { TEAM_LABELS, formatDetails, formatEventDateTime } from '@/lib/schemas/labels'
 import type { RequestDetails, Team } from '@/lib/schemas/request'
 
-import type { RequestFormValues, StepId } from '../form-model'
+import { combineDateTime, type RequestFormValues, type StepId } from '../form-model'
 
 interface Row {
   label: string
   value: string
+}
+
+/** Blank until both halves are answered, so a half-filled row is not shown. */
+function formatEventInstant(date: string, time: string): string {
+  const instant = combineDateTime(date, time)
+
+  return instant ? formatEventDateTime(instant) : ''
 }
 
 function Section({
@@ -66,7 +73,7 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: StepId) => void 
     { label: 'Event name', value: values.eventName },
     {
       label: 'Event date and time',
-      value: values.eventDateTime ? formatEventDateTime(values.eventDateTime) : '',
+      value: formatEventInstant(values.eventDate, values.eventTime),
     },
     ...(values.team ? [{ label: 'Team', value: TEAM_LABELS[values.team as Team] }] : []),
   ].filter((row) => row.value)
