@@ -10,7 +10,6 @@ import { REVEAL_CLASS, YES_NO, choicesFrom } from './choices'
 
 export function AudioStep() {
   const requiresMics = useWatch({ name: 'details.requiresMics' })
-  const micType = useWatch({ name: 'details.micType' })
 
   return (
     <div className="space-y-6">
@@ -31,34 +30,21 @@ export function AudioStep() {
 
       {requiresMics === 'yes' ? (
         <div className={REVEAL_CLASS}>
-          <RadioField
-            name="details.micType"
-            label="What type of microphones?"
-            required
-            choices={choicesFrom(['wireless', 'wired'])}
-          />
+          {/* The kinds are asked for side by side rather than behind a
+              wireless-or-wired choice: an event often needs some of each, and
+              picking one type used to hide the other. */}
+          <div className="space-y-1">
+            <p className="text-sm font-medium">How many of each are needed?</p>
+            <p className="text-sm text-muted-foreground">
+              Leave a kind blank if none are needed.
+            </p>
+          </div>
 
-          {micType === 'wireless' ? (
-            <div className="grid gap-5 sm:grid-cols-2">
-              <NumberField
-                name="details.handheldCount"
-                label="How many handheld?"
-                required
-                min={0}
-              />
-              <NumberField name="details.headsetCount" label="How many headsets?" required min={0} />
-            </div>
-          ) : null}
-
-          {micType === 'wired' ? (
-            <NumberField
-              name="details.wiredCount"
-              label="How many wired mics?"
-              required
-              min={1}
-              className="sm:max-w-xs"
-            />
-          ) : null}
+          <div className="grid gap-5 sm:grid-cols-3">
+            <NumberField name="details.handheldCount" label="Wireless handheld" min={0} />
+            <NumberField name="details.headsetCount" label="Wireless headset" min={0} />
+            <NumberField name="details.wiredCount" label="Wired" min={0} />
+          </div>
         </div>
       ) : null}
 

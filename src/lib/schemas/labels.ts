@@ -42,10 +42,12 @@ const FIELD_LABELS: Record<string, string> = {
   // audio
   location: 'Location',
   requiresMics: 'Microphones required',
-  micType: 'Microphone type',
-  handheldCount: 'Handheld mics',
-  headsetCount: 'Headsets',
+  handheldCount: 'Wireless handheld mics',
+  headsetCount: 'Wireless headsets',
   wiredCount: 'Wired mics',
+
+  /** Retired: the form no longer asks, but requests submitted before it still carry one. */
+  micType: 'Microphone type',
   requiresSpeakers: 'Speakers required',
   audioDescription: 'Additional notes',
 

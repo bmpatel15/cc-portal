@@ -162,9 +162,7 @@ const baseSchema = z.object({ ...contactFields, ...eventFields })
  * exactly as able to carry a contradictory field as the form was.
  */
 
-const AUDIO_MIC_FIELDS = ['micType', 'handheldCount', 'headsetCount', 'wiredCount'] as const
-const AUDIO_WIRELESS_ONLY = ['handheldCount', 'headsetCount'] as const
-const AUDIO_WIRED_ONLY = ['wiredCount'] as const
+const AUDIO_MIC_FIELDS = ['handheldCount', 'headsetCount', 'wiredCount'] as const
 
 const PHOTO_FIELDS = [
   'photographerCount',
@@ -187,12 +185,20 @@ const CONTENT_BRANCH_FIELDS = {
   printing: ['printType', 'printDescription', 'quantity', 'width', 'height'],
 } as const satisfies Record<(typeof CONTENT_TYPES)[number], readonly string[]>
 
+/** Blank, or a count of zero -- either way, none of that kind were requested. */
+function isNone(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true
+
+  return Number(value) === 0
+}
+
 function abandonedDetailKeys(team: Team, details: Record<string, unknown>): readonly string[] {
   if (team === 'audio') {
     if (details.requiresMics !== 'yes') return AUDIO_MIC_FIELDS
-    if (details.micType === 'wireless') return AUDIO_WIRED_ONLY
-    if (details.micType === 'wired') return AUDIO_WIRELESS_ONLY
-    return []
+
+    // A mic type left blank, or set to none, was not asked for -- the request
+    // reads as "two handhelds", not "two handhelds, no headsets, no wired".
+    return AUDIO_MIC_FIELDS.filter((field) => isNone(details[field]))
   }
 
   if (team === 'photo-video') {
@@ -236,54 +242,26 @@ export const audioDetailsSchema = z
       errorMap: () => ({ message: 'Select a location' }),
     }),
     requiresMics: yesNo,
-    micType: z.enum(['wireless', 'wired']).optional(),
-    handheldCount: count('Enter a number of handheld mics').optional(),
-    headsetCount: count('Enter a number of headsets').optional(),
-    wiredCount: count('Enter a number of wired mics', 1).optional(),
+    handheldCount: count('Enter a number of wireless handheld mics').optional(),
+    headsetCount: count('Enter a number of wireless headsets').optional(),
+    wiredCount: count('Enter a number of wired mics').optional(),
     requiresSpeakers: yesNo,
     audioDescription: z.string().trim().optional().or(z.literal('')),
   })
   .superRefine((value, ctx) => {
     if (value.requiresMics !== 'yes') return
 
-    if (!value.micType) {
+    // The three kinds are independent: an event can need two handhelds and a
+    // wired mic at the podium. Each box may be left blank, so the only rule is
+    // that saying "yes" to microphones has to add up to at least one of them.
+    const total =
+      (value.handheldCount ?? 0) + (value.headsetCount ?? 0) + (value.wiredCount ?? 0)
+
+    if (total === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['micType'],
-        message: 'Select a microphone type',
-      })
-      return
-    }
-
-    if (value.micType === 'wireless') {
-      if (value.handheldCount === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['handheldCount'],
-          message: 'Enter how many handheld mics are needed',
-        })
-      }
-      if (value.headsetCount === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['headsetCount'],
-          message: 'Enter how many headsets are needed',
-        })
-      }
-      if ((value.handheldCount ?? 0) + (value.headsetCount ?? 0) === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['handheldCount'],
-          message: 'Request at least one handheld mic or headset',
-        })
-      }
-    }
-
-    if (value.micType === 'wired' && value.wiredCount === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['wiredCount'],
-        message: 'Enter how many wired mics are needed',
+        path: ['handheldCount'],
+        message: 'Enter how many of at least one kind of microphone are needed',
       })
     }
   })
