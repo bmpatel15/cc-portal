@@ -8,7 +8,7 @@ import { SiteHeader } from '@/components/site-header'
 import { StatusBadge } from '@/components/status-badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { TEAM_LABELS, formatDetails } from '@/lib/schemas/labels'
+import { TEAM_LABELS, formatDetails, formatEventDate } from '@/lib/schemas/labels'
 import { getRequestByToken } from '@/lib/requests/service'
 import { filePath } from '@/lib/urls'
 import { referenceCode } from '@/lib/notifications/templates'
@@ -51,7 +51,7 @@ export default async function TrackPage({
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5" />
-                    {format(new Date(request.event_datetime), "d MMM yyyy 'at' h:mm a")}
+                    {formatEventDate(request.event_datetime)}
                   </span>
                 </div>
               </div>

@@ -3,7 +3,7 @@ import {
   STATUS_LABELS,
   TEAM_LABELS,
   formatDetails,
-  formatEventDateTime,
+  formatEventDate,
 } from '@/lib/schemas/labels'
 import type { RequestDetails, RequestStatus, Team } from '@/lib/schemas/request'
 
@@ -23,7 +23,7 @@ export interface NotificationContext {
   phone?: string | null
   department: string
   eventName: string
-  eventDateTime: string
+  eventDate: string
   team: Team
   details: RequestDetails
   files: { name: string; url: string }[]
@@ -59,7 +59,7 @@ function summaryRows(context: NotificationContext): Row[] {
     { label: 'Reference', value: referenceCode(context.id) },
     { label: 'Team', value: TEAM_LABELS[context.team] },
     { label: 'Event', value: context.eventName },
-    { label: 'Event date', value: formatEventDateTime(context.eventDateTime) },
+    { label: 'Event date', value: formatEventDate(context.eventDate) },
     { label: 'Requested by', value: context.fullName },
     { label: 'Email', value: context.email },
     ...(context.phone ? [{ label: 'Phone', value: context.phone }] : []),

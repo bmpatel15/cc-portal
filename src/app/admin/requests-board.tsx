@@ -2,7 +2,6 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
 import { Inbox, Search } from 'lucide-react'
 
 import { FilterChip } from '@/components/filter-chip'
@@ -20,7 +19,7 @@ import {
 } from '@/components/ui/table'
 import { displayName } from '@/lib/profiles/display'
 import type { Actor } from '@/lib/requests/permissions'
-import { STATUS_LABELS, TEAM_LABELS } from '@/lib/schemas/labels'
+import { STATUS_LABELS, TEAM_LABELS, formatEventDate } from '@/lib/schemas/labels'
 import {
   isClosed,
   REQUEST_STATUSES,
@@ -265,7 +264,7 @@ export function RequestsBoard({
                       {TEAM_LABELS[request.team]}
                     </TableCell>
                     <TableCell className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
-                      {format(new Date(request.event_datetime), 'd MMM yyyy')}
+                      {formatEventDate(request.event_datetime)}
                     </TableCell>
                     <TableCell className="hidden max-w-[10rem] md:table-cell">
                       {request.assignee ? (
