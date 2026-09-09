@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ALLOWED_FILE_LABEL, signUploadSchema } from '@/lib/schemas/request'
 import { STORAGE_BUCKET, getAdminClient } from '@/lib/supabase/admin'
 import { resolveFileType, sanitizeFileName } from '@/lib/files'
+import { signUploadPath } from '@/lib/uploads/signature'
 
 export const runtime = 'nodejs'
 
@@ -112,6 +113,8 @@ export async function POST(request: Request) {
   return NextResponse.json({
     success: true,
     path: data.path,
+    // Handed back so the submission can prove this path came from here.
+    signature: signUploadPath(data.path),
     token: data.token,
     signedUrl: data.signedUrl,
     contentType,

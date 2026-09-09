@@ -88,6 +88,9 @@ export const ALLOWED_FILE_LABEL = 'JPG, PNG, PDF, or Word'
 export const uploadedFileSchema = z.object({
   name: requiredText('File name is required'),
   path: requiredText('File path is required'),
+
+  /** Issued by /api/uploads/sign and checked on submit; see lib/uploads. */
+  signature: requiredText('File signature is required'),
   size: z.number().int().min(0).max(MAX_FILE_BYTES, 'File exceeds the 100MB limit'),
   contentType: z.enum(ALLOWED_FILE_TYPES, {
     errorMap: () => ({ message: `Upload a ${ALLOWED_FILE_LABEL} file` }),
