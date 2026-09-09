@@ -4,9 +4,9 @@ import { useWatch } from 'react-hook-form'
 
 import {
   LOCATIONS_WITH_OTHER,
-  LOCATION_OTHER,
   MAX_PHOTOGRAPHERS,
   MAX_VIDEOGRAPHERS,
+  OTHER_OPTION,
   PHOTO_PURPOSES,
   VIDEO_FORMATS,
   VIDEO_TYPES,
@@ -19,7 +19,9 @@ import { REVEAL_CLASS, YES_NO, choicesFrom, countChoices } from './choices'
 export function PhotoVideoStep() {
   const requiresPhoto = useWatch({ name: 'details.requiresPhoto' })
   const requiresVideo = useWatch({ name: 'details.requiresVideo' })
+  const photoPurpose = useWatch({ name: 'details.photoPurpose' })
   const photoLocation = useWatch({ name: 'details.photoLocation' })
+  const videoType = useWatch({ name: 'details.videoType' })
   const videoLocation = useWatch({ name: 'details.videoLocation' })
 
   return (
@@ -52,6 +54,16 @@ export function PhotoVideoStep() {
               placeholder="Select purpose"
               choices={choicesFrom(PHOTO_PURPOSES)}
             />
+            {/* Its own row: a box tucked into the next cell would sit under the
+                count and read as belonging to it. */}
+            {photoPurpose === OTHER_OPTION ? (
+              <TextField
+                name="details.photoPurposeOther"
+                label="What is it for?"
+                placeholder="Optional — describe the purpose"
+                className="sm:col-span-2"
+              />
+            ) : null}
 
             <SelectField
               name="details.photoLocation"
@@ -60,7 +72,7 @@ export function PhotoVideoStep() {
               placeholder="Select a location"
               choices={choicesFrom(LOCATIONS_WITH_OTHER)}
             />
-            {photoLocation === LOCATION_OTHER ? (
+            {photoLocation === OTHER_OPTION ? (
               <TextField
                 name="details.photoLocationOther"
                 label="Which location?"
@@ -110,6 +122,14 @@ export function PhotoVideoStep() {
               placeholder="Select video type"
               choices={choicesFrom(VIDEO_TYPES)}
             />
+            {videoType === OTHER_OPTION ? (
+              <TextField
+                name="details.videoTypeOther"
+                label="Which type?"
+                placeholder="Optional — describe the video"
+                className="sm:col-span-2"
+              />
+            ) : null}
 
             <SelectField
               name="details.videoLocation"
@@ -118,7 +138,7 @@ export function PhotoVideoStep() {
               placeholder="Select a location"
               choices={choicesFrom(LOCATIONS_WITH_OTHER)}
             />
-            {videoLocation === LOCATION_OTHER ? (
+            {videoLocation === OTHER_OPTION ? (
               <TextField
                 name="details.videoLocationOther"
                 label="Which location?"

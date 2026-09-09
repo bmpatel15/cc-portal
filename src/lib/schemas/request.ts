@@ -139,12 +139,14 @@ export const DEPARTMENT_OTHER = 'Other'
  *
  * Audio has always picked from this list; photo and video used to take free
  * text, which spelled the same room four ways and could not be compared across
- * requests. `LOCATION_OTHER` is the escape hatch for anywhere not listed -- the
+ * requests. `OTHER_OPTION` is the escape hatch for anywhere not listed -- the
  * typed answer is folded into the location itself before it is stored.
  */
 export const LOCATIONS = ['main-hall', 'gym', 'outdoors', 'bky-rooms'] as const
-export const LOCATION_OTHER = 'other'
-export const LOCATIONS_WITH_OTHER = [...LOCATIONS, LOCATION_OTHER] as const
+
+/** The dropdown member that reveals a box to type in. Shared with purposes and video types. */
+export const OTHER_OPTION = 'other'
+export const LOCATIONS_WITH_OTHER = [...LOCATIONS, OTHER_OPTION] as const
 
 export const contactFields = {
   fullName: requiredText('Full name is required'),
@@ -189,6 +191,7 @@ const AUDIO_MIC_FIELDS = ['handheldCount', 'headsetCount', 'wiredCount'] as cons
 const PHOTO_FIELDS = [
   'photographerCount',
   'photoPurpose',
+  'photoPurposeOther',
   'photoLocation',
   'photoLocationOther',
   'photoLocationNotes',
@@ -197,6 +200,7 @@ const PHOTO_FIELDS = [
 const VIDEO_FIELDS = [
   'videographerCount',
   'videoType',
+  'videoTypeOther',
   'videoAudience',
   'videoLocation',
   'videoLocationOther',
@@ -251,18 +255,25 @@ function abandonedDetailKeys(team: Team, details: Record<string, unknown>): read
  *
  * Exported for the review step, which previews the record before it exists.
  */
+const OTHER_PAIRS = [
+  ['photoPurpose', 'photoPurposeOther'],
+  ['photoLocation', 'photoLocationOther'],
+  ['videoType', 'videoTypeOther'],
+  ['videoLocation', 'videoLocationOther'],
+] as const
+
 export function resolveDetails<T extends Record<string, unknown>>(team: Team, details: T): T {
   if (team !== 'photo-video') return details
 
   const resolved: Record<string, unknown> = { ...details }
 
-  for (const [location, other] of [
-    ['photoLocation', 'photoLocationOther'],
-    ['videoLocation', 'videoLocationOther'],
-  ] as const) {
-    if (resolved[location] === LOCATION_OTHER) {
-      resolved[location] = String(resolved[other] ?? '').trim()
-    }
+  for (const [answer, other] of OTHER_PAIRS) {
+    const typed = String(resolved[other] ?? '').trim()
+
+    // Only a typed answer replaces "Other". The purpose boxes are optional, and
+    // an empty one has to leave the dropdown's own answer standing rather than
+    // blanking a question the requestor did answer.
+    if (resolved[answer] === OTHER_OPTION && typed !== '') resolved[answer] = typed
     delete resolved[other]
   }
 
@@ -338,6 +349,7 @@ export const photoVideoDetailsSchema = z
       .max(MAX_PHOTOGRAPHERS, `At most ${MAX_PHOTOGRAPHERS} photographers can be requested`)
       .optional(),
     photoPurpose: z.enum(PHOTO_PURPOSES).optional(),
+    photoPurposeOther: z.string().trim().optional().or(z.literal('')),
     photoLocation: z.enum(LOCATIONS_WITH_OTHER).optional(),
     photoLocationOther: z.string().trim().optional().or(z.literal('')),
     photoLocationNotes: z.string().trim().optional().or(z.literal('')),
@@ -348,6 +360,7 @@ export const photoVideoDetailsSchema = z
       .max(MAX_VIDEOGRAPHERS, `At most ${MAX_VIDEOGRAPHERS} videographers can be requested`)
       .optional(),
     videoType: z.enum(VIDEO_TYPES).optional(),
+    videoTypeOther: z.string().trim().optional().or(z.literal('')),
     videoAudience: z.string().trim().optional().or(z.literal('')),
     videoLocation: z.enum(LOCATIONS_WITH_OTHER).optional(),
     videoLocationOther: z.string().trim().optional().or(z.literal('')),
@@ -374,7 +387,7 @@ export const photoVideoDetailsSchema = z
     // where, or the record reads "Other" and nobody knows the room.
     const requireLocation = (path: string, location: unknown, other: unknown) => {
       required(path, location, 'Select a location')
-      if (location === LOCATION_OTHER) {
+      if (location === OTHER_OPTION) {
         required(`${path}Other`, other, 'Enter the location')
       }
     }
