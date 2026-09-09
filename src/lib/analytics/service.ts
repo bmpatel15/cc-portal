@@ -38,9 +38,12 @@ import { median, percentile, round1, share, sum, toDays, toHours } from './stats
 const PAGE_SIZE = 1000
 
 /** Age buckets for open work, in days. */
+// Labels describe the half-open ranges the filter below actually applies
+// (`>= min && < max`). They used to read "0-7" and "8-30", which put a request
+// aged 7.2 days in a bucket labelled "8-30 days".
 const AGE_BUCKETS = [
-  { key: 'fresh', label: '0–7 days', min: 0, max: 7 },
-  { key: 'aging', label: '8–30 days', min: 7, max: 30 },
+  { key: 'fresh', label: 'Under 7 days', min: 0, max: 7 },
+  { key: 'aging', label: '7–30 days', min: 7, max: 30 },
   { key: 'stale', label: 'Over 30 days', min: 30, max: Infinity },
 ] as const
 
