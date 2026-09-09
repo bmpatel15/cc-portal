@@ -14,6 +14,7 @@ import {
   buildPeriods,
   comparePeriods,
   hasEnoughHistory,
+  percentChange,
   periodKey,
   windowRange,
   type Period,
@@ -246,7 +247,25 @@ export async function getAnalytics(filters: AnalyticsFilters): Promise<Analytics
   )
   const volume = comparePeriods(allCounts, periods, granularity, earliest)
 
-  const headlineComparison = volume[volume.length - 1]
+  // Compared against the window of equal length immediately before this one, so
+  // all three headline numbers describe the same span. They used to disagree:
+  // `total` covered the whole window while `prior` and `change` were lifted from
+  // the latest period alone, so a twelve-month total was reported as a change
+  // against one month.
+  const priorWindow = windowRange(
+    buildPeriods(granularity, windowSize * 2, now).slice(0, windowSize),
+  )
+
+  // Null rather than zero when the baseline closed before the portal saw its
+  // first request -- the same distinction comparePeriods draws between a quiet
+  // month and a month that did not exist.
+  const priorTotal =
+    priorWindow && earliest && priorWindow.end > earliest
+      ? rows.filter((row) => {
+          const at = new Date(row.created_at)
+          return at >= priorWindow.start && at < priorWindow.end
+        }).length
+      : null
 
   /* Mixes ----------------------------------------------------------------- */
 
@@ -419,8 +438,8 @@ export async function getAnalytics(filters: AnalyticsFilters): Promise<Analytics
 
     headline: {
       total,
-      prior: headlineComparison?.prior ?? null,
-      change: headlineComparison?.change ?? null,
+      prior: priorTotal,
+      change: priorTotal === null ? null : percentChange(total, priorTotal),
     },
 
     volume,
