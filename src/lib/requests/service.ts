@@ -1,4 +1,4 @@
-import { getAdminClient, publicFileUrl } from '@/lib/supabase/admin'
+import { getAdminClient } from '@/lib/supabase/admin'
 import type {
   RequestFileRow,
   RequestRow,
@@ -17,7 +17,7 @@ import { queueAndDeliver, type QueuedNotification } from '@/lib/notifications/di
 import { staffEmailRecipient } from '@/lib/notifications/email'
 import { telegramRecipient } from '@/lib/notifications/telegram'
 import { canAssign, canChangeStatus, type Actor } from '@/lib/requests/permissions'
-import { adminRequestUrl, trackingUrl } from '@/lib/urls'
+import { adminRequestUrl, fileUrl, trackingUrl } from '@/lib/urls'
 
 /**
  * Persistence first, delivery second.
@@ -47,10 +47,18 @@ const STAFF_REQUEST_SELECT = `
   request_time_entries (*)
 `
 
+/**
+ * `fileToken` decides which audience the attachment links are built for: the
+ * requester needs their tracking token in the URL, staff are authorised by their
+ * session and get a bare link. The same file therefore appears as two different
+ * URLs in two different emails, which is why the link is built here rather than
+ * stored on the row.
+ */
 function toContext(
   request: RequestRow,
-  files: Pick<RequestFileRow, 'name' | 'url'>[],
+  files: Pick<RequestFileRow, 'id' | 'name'>[],
   url: string,
+  fileToken?: string | null,
 ): NotificationContext {
   return {
     id: request.id,
@@ -62,7 +70,7 @@ function toContext(
     eventDateTime: request.event_datetime,
     team: request.team,
     details: request.details,
-    files: files.map((file) => ({ name: file.name, url: file.url })),
+    files: files.map((file) => ({ name: file.name, url: fileUrl(file.id, fileToken) })),
     trackingUrl: url,
   }
 }
@@ -99,22 +107,33 @@ export async function createRequest(input: RequestInput): Promise<CreatedRequest
   const request = inserted as RequestRow
 
   // Files were already uploaded to storage via signed URLs; record them.
+  //
+  // The rows are read back because the link is derived from the database-issued
+  // id: nothing can address an attachment until it has one. `url` is left unset
+  // -- see 0005_private_file_access.sql.
+  let fileRows: Pick<RequestFileRow, 'id' | 'name'>[] = []
+
   if (input.files.length > 0) {
-    const { error: filesError } = await supabase.from('request_files').insert(
-      input.files.map((file) => ({
-        request_id: request.id,
-        name: file.name,
-        storage_path: file.path,
-        url: publicFileUrl(file.path),
-        size_bytes: file.size,
-        content_type: file.contentType,
-      })),
-    )
+    const { data: insertedFiles, error: filesError } = await supabase
+      .from('request_files')
+      .insert(
+        input.files.map((file) => ({
+          request_id: request.id,
+          name: file.name,
+          storage_path: file.path,
+          size_bytes: file.size,
+          content_type: file.contentType,
+        })),
+      )
+      .select('id, name')
 
     if (filesError) {
-      // The request itself is saved; surface the problem without losing it.
+      // The request itself is saved; surface the problem without losing it. The
+      // notifications then simply carry no attachment list, as before.
       console.error(`Failed to record files for request ${request.id}:`, filesError.message)
     }
+
+    fileRows = (insertedFiles ?? []) as Pick<RequestFileRow, 'id' | 'name'>[]
   }
 
   const { error: historyError } = await supabase.from('request_status_history').insert({
@@ -129,10 +148,9 @@ export async function createRequest(input: RequestInput): Promise<CreatedRequest
   }
 
   const url = trackingUrl(request.tracking_token)
-  const files = input.files.map((file) => ({ name: file.name, url: publicFileUrl(file.path) }))
 
-  const staffContext = toContext(request, files, adminRequestUrl(request.id))
-  const submitterContext = toContext(request, files, url)
+  const staffContext = toContext(request, fileRows, adminRequestUrl(request.id))
+  const submitterContext = toContext(request, fileRows, url, request.tracking_token)
 
   const staffEmail = buildStaffNotification(staffContext)
   const confirmation = buildSubmitterConfirmation(submitterContext)
@@ -302,7 +320,7 @@ export async function updateRequestStatus(
   }
 
   const url = trackingUrl(existing.tracking_token)
-  const context = toContext(existing, existing.request_files ?? [], url)
+  const context = toContext(existing, existing.request_files ?? [], url, existing.tracking_token)
   const message = buildStatusChangeNotification(context, existing.status, status, note)
 
   await queueAndDeliver([

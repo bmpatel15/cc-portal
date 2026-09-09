@@ -31,7 +31,9 @@ export interface RequestFileRow {
   request_id: string
   name: string
   storage_path: string
-  url: string
+
+  /** Legacy. Nothing reads or writes this; links come from /api/files/<id>. */
+  url: string | null
   size_bytes: number
   content_type: string
   created_at: string

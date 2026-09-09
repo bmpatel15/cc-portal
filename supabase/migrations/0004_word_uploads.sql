@@ -18,11 +18,15 @@
 -- a dedupe, and as an insert so a fresh project where the bucket does not exist
 -- yet is provisioned correctly. 0001 seeds the same array; both are kept in
 -- sync because 0001's on-conflict clause would otherwise revert this.
+--
+-- `public` is false for the same reason, in the other direction: attachments are
+-- private as of 0005_private_file_access.sql, and this upsert would re-publish
+-- the bucket if it still claimed true.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'cc-portal',
   'cc-portal',
-  true,
+  false,
   104857600, -- 100MB
   array[
     'image/jpeg',

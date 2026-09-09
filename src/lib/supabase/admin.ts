@@ -26,8 +26,3 @@ export function getAdminClient(): SupabaseClient {
 }
 
 export const STORAGE_BUCKET = 'cc-portal'
-
-export function publicFileUrl(storagePath: string): string {
-  const { supabaseUrl } = getPublicEnv()
-  return `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${storagePath}`
-}

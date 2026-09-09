@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { TEAM_LABELS, formatDetails } from '@/lib/schemas/labels'
 import { getRequestByToken } from '@/lib/requests/service'
+import { filePath } from '@/lib/urls'
 import { referenceCode } from '@/lib/notifications/templates'
 
 export const metadata: Metadata = {
@@ -107,7 +108,7 @@ export default async function TrackPage({
                       {request.request_files.map((file) => (
                         <li key={file.id}>
                           <a
-                            href={file.url}
+                            href={filePath(file.id, token)}
                             target="_blank"
                             rel="noreferrer"
                             className="break-anywhere inline-flex items-center gap-2 text-sm font-medium text-primary underline-offset-4 hover:underline"

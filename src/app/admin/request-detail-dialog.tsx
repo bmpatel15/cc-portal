@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { RequestTimeline } from '@/components/request-timeline'
 import { StatusBadge } from '@/components/status-badge'
+import { filePath } from '@/lib/urls'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -176,7 +177,7 @@ export function RequestDetailDialog({
                     {request.request_files.map((file) => (
                       <li key={file.id}>
                         <a
-                          href={file.url}
+                          href={filePath(file.id)}
                           target="_blank"
                           rel="noreferrer"
                           className="break-anywhere inline-flex items-center gap-2 text-sm font-medium text-primary underline-offset-4 hover:underline"
