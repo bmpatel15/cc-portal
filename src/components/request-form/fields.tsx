@@ -58,7 +58,8 @@ export function TextField({
   className,
   type = 'text',
   placeholder,
-}: BaseProps & { type?: string; placeholder?: string }) {
+  min,
+}: BaseProps & { type?: string; placeholder?: string; min?: string }) {
   const form = useFormContext<RequestFormValues>()
   const clear = useClearOnChange(name)
 
@@ -77,6 +78,7 @@ export function TextField({
               {...field}
               type={type}
               placeholder={placeholder}
+              min={min}
               value={typeof field.value === 'string' ? field.value : ''}
               onChange={(event) => {
                 clear()

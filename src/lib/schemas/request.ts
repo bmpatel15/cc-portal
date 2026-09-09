@@ -150,17 +150,48 @@ export const LOCATIONS_WITH_OTHER = [...LOCATIONS, OTHER_OPTION] as const
 
 export const contactFields = {
   fullName: requiredText('Full name is required'),
-  email: z.string().trim().email('Enter a valid email address'),
+
+  // 254 is the longest address a mail server has to accept (RFC 5321), and the
+  // confirmation and tracking link are sent here -- an address nothing can
+  // deliver to makes the request unreachable.
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Email is required')
+    .max(254, 'Email address is too long')
+    .email('Enter a valid email address'),
   phone: z.string().trim().max(40, 'Phone number is too long').optional().or(z.literal('')),
   department: requiredText('Department is required'),
 }
 
+/**
+ * Midnight UTC on the day `at` falls on -- the instant the form stores a picked
+ * day at, so a stored date and today can be compared as the same kind of thing.
+ */
+export function startOfUtcDay(at: Date = new Date()): number {
+  return Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
 export const eventFields = {
   eventName: requiredText('Event name is required'),
-  eventDate: requiredText('Event date is required').refine(
-    (value) => !Number.isNaN(Date.parse(value)),
-    'Enter a valid date',
-  ),
+
+  /**
+   * A day that has already been and gone cannot be requested.
+   *
+   * The server runs in UTC while the requestor does not, so a whole day of slack
+   * sits under the check: at 9pm in New York it is already tomorrow in UTC, and
+   * an event later that same evening is still a real request. The wizard applies
+   * the exact rule against the requestor's own clock -- this is the backstop for
+   * anything posted straight at the API.
+   */
+  eventDate: requiredText('Event date is required')
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid date')
+    .refine(
+      (value) => Date.parse(value) >= startOfUtcDay() - DAY_MS,
+      'The event date cannot be in the past',
+    ),
 }
 
 const baseSchema = z.object({ ...contactFields, ...eventFields })

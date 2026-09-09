@@ -94,6 +94,21 @@ export function eventDateInstant(date: string): string {
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString()
 }
 
+/**
+ * Today as the date input spells it, on the requestor's own clock.
+ *
+ * The wizard compares plain `YYYY-MM-DD` strings rather than instants: that is
+ * what the picker holds, the comparison sorts correctly as text, and no time
+ * zone gets between the day someone sees in the calendar and the day they are
+ * told is in the past.
+ */
+export function todayLocalDate(at: Date = new Date()): string {
+  const month = String(at.getMonth() + 1).padStart(2, '0')
+  const day = String(at.getDate()).padStart(2, '0')
+
+  return `${at.getFullYear()}-${month}-${day}`
+}
+
 export interface ValidationIssue {
   path: string
   message: string
@@ -112,8 +127,20 @@ export function validateValues(values: RequestFormValues): {
   const schema = values.team ? schemaForTeam(values.team) : partialRequestSchema
   const result = schema.safeParse(cleaned)
 
+  // The schema allows a day of slack around "today" because it cannot know the
+  // requestor's time zone; here we can, so the wizard holds them to their own
+  // calendar and says so before the step advances.
+  const local: ValidationIssue[] =
+    values.eventDate && values.eventDate < todayLocalDate()
+      ? [{ path: 'eventDate', message: 'The event date cannot be in the past' }]
+      : []
+
   if (result.success) {
-    return { ok: true, data: values.team ? (result.data as RequestInput) : undefined, issues: [] }
+    if (local.length === 0) {
+      return { ok: true, data: values.team ? (result.data as RequestInput) : undefined, issues: [] }
+    }
+
+    return { ok: false, issues: local }
   }
 
   const raw = result.error.issues.map((issue) => ({
@@ -125,7 +152,7 @@ export function validateValues(values: RequestFormValues): {
   // an issue against it has no field to attach to when "Other" is picked and
   // setError would drop it silently -- the wizard would refuse to advance while
   // highlighting nothing. It is pointed at the box the requestor can act on.
-  const issues: ValidationIssue[] = []
+  const issues: ValidationIssue[] = [...local]
 
   for (const issue of raw) {
     if (issue.path === 'department' && values.department === DEPARTMENT_OTHER) {
