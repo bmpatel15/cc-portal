@@ -45,11 +45,16 @@ export function RequestsBoard({
   requests,
   actor,
   staff,
+  truncated,
+  total,
   initialRequestId,
 }: {
   requests: RequestWithRelations[]
   actor: Actor
   staff: ProfileSummary[]
+  /** More requests exist than were loaded, so the counts below are a floor. */
+  truncated: boolean
+  total: number
   initialRequestId: string | null
 }) {
   const router = useRouter()
@@ -117,6 +122,17 @@ export function RequestsBoard({
 
   return (
     <div className="space-y-5">
+      {/* Counting, filtering and searching all happen over the rows actually
+          loaded, so when there are more the numbers are a floor rather than a
+          total. Saying so is the difference between a limit and a wrong answer. */}
+      {truncated ? (
+        <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          Showing the {requests.length.toLocaleString()} most recent of{' '}
+          {total.toLocaleString()} requests. Counts and search cover these only — use
+          Analytics for figures across everything.
+        </p>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(['pending', 'in_progress', 'review', 'complete'] as RequestStatus[]).map((key) => (
           <Card

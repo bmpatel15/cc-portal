@@ -26,8 +26,8 @@ import { median, percentile, round1, share, sum, toDays, toHours } from './stats
  * Every figure the analytics dashboard shows.
  *
  * Reads come from the `request_durations` view (0003), never from
- * `listRequests()` — that helper caps at 200 rows, which would silently
- * under-report the moment the portal outgrew a single screen of history.
+ * `listRequests()` — that helper stops at a ceiling meant for the board, and
+ * carries every relation with each row, neither of which suits an aggregate.
  *
  * The shape of the work is: pull every row once, then derive every metric in
  * memory. At portal scale that is a handful of round trips saved and a single
