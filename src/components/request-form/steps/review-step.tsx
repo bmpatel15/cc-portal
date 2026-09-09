@@ -6,7 +6,12 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { TEAM_LABELS, formatDetails, formatEventDate } from '@/lib/schemas/labels'
-import { pruneDetails, type RequestDetails, type Team } from '@/lib/schemas/request'
+import {
+  pruneDetails,
+  resolveDetails,
+  type RequestDetails,
+  type Team,
+} from '@/lib/schemas/request'
 
 import {
   eventDateInstant,
@@ -86,7 +91,10 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: StepId) => void 
   const detailRows: Row[] = values.team
     ? formatDetails(
         values.team as Team,
-        pruneDetails(values.team as Team, values.details) as unknown as RequestDetails,
+        pruneDetails(
+          values.team as Team,
+          resolveDetails(values.team as Team, values.details),
+        ) as unknown as RequestDetails,
       ).map(({ label, value }) => ({ label, value }))
     : []
 
