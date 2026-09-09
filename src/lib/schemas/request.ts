@@ -53,6 +53,29 @@ const yesNo = z.enum(['yes', 'no'])
 export type YesNo = z.infer<typeof yesNo>
 
 const requiredText = (message: string) => z.string().trim().min(1, message)
+
+/**
+ * A ceiling on a count, checked only for the branch that asked for it.
+ *
+ * These live in `superRefine` rather than on the field so that a count left
+ * behind by an abandoned branch -- about to be dropped by `pruneDetails` -- does
+ * not fail validation on a box the requestor can no longer see.
+ */
+function atMost(
+  ctx: z.RefinementCtx,
+  path: string,
+  value: number | undefined,
+  max: number,
+  what: string,
+) {
+  if (value !== undefined && value > max) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [path],
+      message: `There are only ${max} ${what}`,
+    })
+  }
+}
 const count = (message: string, min = 0) =>
   z.coerce.number({ invalid_type_error: message }).int(message).min(min, message)
 
@@ -79,6 +102,11 @@ export const MAX_FILES = 10
  */
 export const MAX_PHOTOGRAPHERS = 5
 export const MAX_VIDEOGRAPHERS = 3
+
+/** The same, for the mics in the cupboard. */
+export const MAX_HANDHELD_MICS = 10
+export const MAX_HEADSET_MICS = 4
+export const MAX_WIRED_MICS = 10
 
 /** Keep in sync with the bucket's allowed_mime_types in supabase/migrations. */
 export const ALLOWED_FILE_TYPES = [
@@ -345,7 +373,14 @@ export const audioDetailsSchema = z
     audioDescription: z.string().trim().optional().or(z.literal('')),
   })
   .superRefine((value, ctx) => {
+    // Only the branch that was asked for is held to the ceilings. A count left
+    // behind by someone who switched microphones off is about to be pruned, and
+    // failing it here would block the form on a box that is no longer on screen.
     if (value.requiresMics !== 'yes') return
+
+    atMost(ctx, 'handheldCount', value.handheldCount, MAX_HANDHELD_MICS, 'wireless handheld mics')
+    atMost(ctx, 'headsetCount', value.headsetCount, MAX_HEADSET_MICS, 'wireless headsets')
+    atMost(ctx, 'wiredCount', value.wiredCount, MAX_WIRED_MICS, 'wired mics')
 
     // The three kinds are independent: an event can need two handhelds and a
     // wired mic at the podium. Each box may be left blank, so the only rule is
@@ -376,9 +411,7 @@ export const VIDEO_FORMATS = ['live', 'recorded', 'both'] as const
 export const photoVideoDetailsSchema = z
   .object({
     requiresPhoto: yesNo,
-    photographerCount: count('Enter a number of photographers', 1)
-      .max(MAX_PHOTOGRAPHERS, `At most ${MAX_PHOTOGRAPHERS} photographers can be requested`)
-      .optional(),
+    photographerCount: count('Enter a number of photographers', 1).optional(),
     photoPurpose: z.enum(PHOTO_PURPOSES).optional(),
     photoPurposeOther: z.string().trim().optional().or(z.literal('')),
     photoLocation: z.enum(LOCATIONS_WITH_OTHER).optional(),
@@ -387,9 +420,7 @@ export const photoVideoDetailsSchema = z
     photoDeliverables: z.string().trim().optional().or(z.literal('')),
 
     requiresVideo: yesNo,
-    videographerCount: count('Enter a number of videographers', 1)
-      .max(MAX_VIDEOGRAPHERS, `At most ${MAX_VIDEOGRAPHERS} videographers can be requested`)
-      .optional(),
+    videographerCount: count('Enter a number of videographers', 1).optional(),
     videoType: z.enum(VIDEO_TYPES).optional(),
     videoTypeOther: z.string().trim().optional().or(z.literal('')),
     videoAudience: z.string().trim().optional().or(z.literal('')),
@@ -425,12 +456,14 @@ export const photoVideoDetailsSchema = z
 
     if (value.requiresPhoto === 'yes') {
       required('photographerCount', value.photographerCount, 'Enter how many photographers are needed')
+      atMost(ctx, 'photographerCount', value.photographerCount, MAX_PHOTOGRAPHERS, 'photographers')
       required('photoPurpose', value.photoPurpose, 'Select the purpose of the photography')
       requireLocation('photoLocation', value.photoLocation, value.photoLocationOther)
     }
 
     if (value.requiresVideo === 'yes') {
       required('videographerCount', value.videographerCount, 'Enter how many videographers are needed')
+      atMost(ctx, 'videographerCount', value.videographerCount, MAX_VIDEOGRAPHERS, 'videographers')
       required('videoType', value.videoType, 'Select the type of video')
       requireLocation('videoLocation', value.videoLocation, value.videoLocationOther)
       required('videoFormat', value.videoFormat, 'Select live, recorded, or both')

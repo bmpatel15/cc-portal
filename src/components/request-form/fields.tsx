@@ -101,8 +101,9 @@ export function NumberField({
   required,
   className,
   min = 0,
+  max,
   step,
-}: BaseProps & { min?: number; step?: string }) {
+}: BaseProps & { min?: number; max?: number; step?: string }) {
   const form = useFormContext<RequestFormValues>()
   const clear = useClearOnChange(name)
 
@@ -122,6 +123,7 @@ export function NumberField({
               type="number"
               inputMode="decimal"
               min={min}
+              max={max}
               step={step}
               value={typeof field.value === 'string' ? field.value : ''}
               onChange={(event) => {
