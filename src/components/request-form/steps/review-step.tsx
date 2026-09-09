@@ -6,7 +6,7 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { TEAM_LABELS, formatDetails, formatEventDateTime } from '@/lib/schemas/labels'
-import type { RequestDetails, Team } from '@/lib/schemas/request'
+import { pruneDetails, type RequestDetails, type Team } from '@/lib/schemas/request'
 
 import {
   combineDateTime,
@@ -83,10 +83,14 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: StepId) => void 
     ...(values.team ? [{ label: 'Team', value: TEAM_LABELS[values.team as Team] }] : []),
   ].filter((row) => row.value)
 
+  // Pruned before display: the form still holds answers from branches the
+  // requestor backed out of, and the review page has to show what will actually
+  // be submitted rather than everything left in state.
   const detailRows: Row[] = values.team
-    ? formatDetails(values.team as Team, values.details as unknown as RequestDetails).map(
-        ({ label, value }) => ({ label, value }),
-      )
+    ? formatDetails(
+        values.team as Team,
+        pruneDetails(values.team as Team, values.details) as unknown as RequestDetails,
+      ).map(({ label, value }) => ({ label, value }))
     : []
 
   const files = values.files ?? []
