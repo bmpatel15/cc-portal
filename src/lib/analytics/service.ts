@@ -14,6 +14,7 @@ import {
   buildPeriods,
   comparePeriods,
   hasEnoughHistory,
+  percentChange,
   periodKey,
   windowRange,
   type Period,
@@ -25,8 +26,8 @@ import { median, percentile, round1, share, sum, toDays, toHours } from './stats
  * Every figure the analytics dashboard shows.
  *
  * Reads come from the `request_durations` view (0003), never from
- * `listRequests()` — that helper caps at 200 rows, which would silently
- * under-report the moment the portal outgrew a single screen of history.
+ * `listRequests()` — that helper stops at a ceiling meant for the board, and
+ * carries every relation with each row, neither of which suits an aggregate.
  *
  * The shape of the work is: pull every row once, then derive every metric in
  * memory. At portal scale that is a handful of round trips saved and a single
@@ -38,9 +39,12 @@ import { median, percentile, round1, share, sum, toDays, toHours } from './stats
 const PAGE_SIZE = 1000
 
 /** Age buckets for open work, in days. */
+// Labels describe the half-open ranges the filter below actually applies
+// (`>= min && < max`). They used to read "0-7" and "8-30", which put a request
+// aged 7.2 days in a bucket labelled "8-30 days".
 const AGE_BUCKETS = [
-  { key: 'fresh', label: '0–7 days', min: 0, max: 7 },
-  { key: 'aging', label: '8–30 days', min: 7, max: 30 },
+  { key: 'fresh', label: 'Under 7 days', min: 0, max: 7 },
+  { key: 'aging', label: '7–30 days', min: 7, max: 30 },
   { key: 'stale', label: 'Over 30 days', min: 30, max: Infinity },
 ] as const
 
@@ -243,7 +247,25 @@ export async function getAnalytics(filters: AnalyticsFilters): Promise<Analytics
   )
   const volume = comparePeriods(allCounts, periods, granularity, earliest)
 
-  const headlineComparison = volume[volume.length - 1]
+  // Compared against the window of equal length immediately before this one, so
+  // all three headline numbers describe the same span. They used to disagree:
+  // `total` covered the whole window while `prior` and `change` were lifted from
+  // the latest period alone, so a twelve-month total was reported as a change
+  // against one month.
+  const priorWindow = windowRange(
+    buildPeriods(granularity, windowSize * 2, now).slice(0, windowSize),
+  )
+
+  // Null rather than zero when the baseline closed before the portal saw its
+  // first request -- the same distinction comparePeriods draws between a quiet
+  // month and a month that did not exist.
+  const priorTotal =
+    priorWindow && earliest && priorWindow.end > earliest
+      ? rows.filter((row) => {
+          const at = new Date(row.created_at)
+          return at >= priorWindow.start && at < priorWindow.end
+        }).length
+      : null
 
   /* Mixes ----------------------------------------------------------------- */
 
@@ -416,8 +438,8 @@ export async function getAnalytics(filters: AnalyticsFilters): Promise<Analytics
 
     headline: {
       total,
-      prior: headlineComparison?.prior ?? null,
-      change: headlineComparison?.change ?? null,
+      prior: priorTotal,
+      change: priorTotal === null ? null : percentChange(total, priorTotal),
     },
 
     volume,

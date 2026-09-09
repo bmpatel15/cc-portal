@@ -231,26 +231,90 @@ export interface ListFilters {
   search?: string
 }
 
-export async function listRequests(filters: ListFilters = {}): Promise<RequestWithRelations[]> {
-  let query = getAdminClient()
-    .from('requests')
-    .select(STAFF_REQUEST_SELECT)
-    .order('created_at', { ascending: false })
-    .limit(200)
+/** Supabase caps a single response at 1000 rows regardless of `.limit()`. */
+const PAGE_SIZE = 1000
 
-  if (filters.status) query = query.eq('status', filters.status)
-  if (filters.team) query = query.eq('team', filters.team)
-  if (filters.search) {
-    const term = `%${filters.search}%`
-    query = query.or(
-      `event_name.ilike.${term},full_name.ilike.${term},email.ilike.${term},department.ilike.${term}`,
-    )
+/**
+ * How many requests the board will load.
+ *
+ * The board counts, filters and searches entirely in memory, so it needs the
+ * whole set for its numbers to be true. A ceiling still bounds the payload --
+ * each row carries its files, history and time entries -- but past it the board
+ * is *told* it is looking at a slice, instead of reporting the newest few
+ * hundred as though they were everything.
+ */
+const BOARD_LIMIT = 2000
+
+export interface RequestList {
+  requests: RequestWithRelations[]
+  /** More requests exist than were loaded, so any total shown is a floor. */
+  truncated: boolean
+  /** How many match the filters in total, whether or not they were loaded. */
+  total: number
+}
+
+export async function listRequests(filters: ListFilters = {}): Promise<RequestList> {
+  const requests: RequestWithRelations[] = []
+  let total = 0
+
+  for (let page = 0; page * PAGE_SIZE < BOARD_LIMIT; page += 1) {
+    // The count comes back with the first page only; asking on every page would
+    // repeat the same scan for an answer that cannot change mid-read.
+    let query = getAdminClient()
+      .from('requests')
+      .select(STAFF_REQUEST_SELECT, page === 0 ? { count: 'exact' } : {})
+      .order('created_at', { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+    if (filters.status) query = query.eq('status', filters.status)
+    if (filters.team) query = query.eq('team', filters.team)
+    if (filters.search) {
+      // PostgREST parses `or=(...)` as a comma-separated list of conditions, so
+      // a raw term containing `,` or `)` closes this filter and appends
+      // conditions of the caller's choosing -- `x,status.eq.complete` would
+      // quietly change which rows come back. Double-quoting makes the value a
+      // literal, and the backslash escapes let a quote inside the term stay data.
+      const term = filters.search.replaceAll('\\', '\\\\').replaceAll('"', '\\"')
+      const like = `"%${term}%"`
+
+      query = query.or(
+        `event_name.ilike.${like},full_name.ilike.${like},email.ilike.${like},department.ilike.${like}`,
+      )
+    }
+
+    const { data, error, count } = await query
+    if (error) throw new Error(`Failed to load requests: ${error.message}`)
+
+    if (page === 0) total = count ?? 0
+
+    const batch = (data ?? []) as RequestWithRelations[]
+    requests.push(...batch)
+
+    if (batch.length < PAGE_SIZE) break
   }
 
-  const { data, error } = await query
-  if (error) throw new Error(`Failed to load requests: ${error.message}`)
+  return {
+    requests: requests.map(sortRelations),
+    truncated: total > requests.length,
+    total,
+  }
+}
 
-  return (data as RequestWithRelations[]).map(sortRelations)
+/**
+ * One request with everything the dashboard shows, by id.
+ *
+ * Separate from `getRequestById`, which serves the tracking page and
+ * deliberately leaves out logged time.
+ */
+export async function getStaffRequestById(id: string): Promise<RequestWithRelations | null> {
+  const { data, error } = await getAdminClient()
+    .from('requests')
+    .select(STAFF_REQUEST_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return sortRelations(data as RequestWithRelations)
 }
 
 export async function getRequestCounts(): Promise<Record<RequestStatus, number>> {

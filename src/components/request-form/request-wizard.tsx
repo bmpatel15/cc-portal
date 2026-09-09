@@ -68,7 +68,9 @@ export function RequestWizard() {
     form.clearErrors()
 
     // `partialRequestSchema` leaves team optional; the team step requires it.
-    if (stepFilter?.('team') && !values.team) {
+    // No filter means "check everything", so the guard has to fire then too --
+    // `stepFilter?.('team')` was undefined there, which skipped it silently.
+    if ((!stepFilter || stepFilter('team')) && !values.team) {
       form.setError('team', { message: 'Select a team to continue' })
       return false
     }
@@ -104,6 +106,19 @@ export function RequestWizard() {
 
   async function handleSubmit() {
     const values = form.getValues()
+
+    // Handled before the general case because it is the one way to reach this
+    // function with nothing to report: without a team the partial schema passes,
+    // so `ok` is true and `data` is undefined, leaving no issue to highlight and
+    // no step to navigate to. The user got "some answers still need attention"
+    // with nothing marked and nowhere to go.
+    if (!values.team) {
+      form.setError('team', { message: 'Select a team to continue' })
+      toast.error('Some answers still need attention')
+      goTo(stepIndex('team'))
+      return
+    }
+
     const { ok, data, issues } = validateValues(values)
 
     if (!ok || !data) {

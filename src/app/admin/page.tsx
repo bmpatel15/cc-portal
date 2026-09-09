@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import { listActiveStaff } from '@/lib/profiles/service'
-import { listRequests } from '@/lib/requests/service'
+import { getStaffRequestById, listRequests } from '@/lib/requests/service'
 import { getCurrentProfile } from '@/lib/supabase/server'
 
 import { RequestsBoard } from './requests-board'
@@ -19,19 +19,32 @@ export default async function AdminPage({
   const profile = await getCurrentProfile()
   if (!profile || !profile.is_active) redirect('/login')
 
-  const [requests, staff, params] = await Promise.all([
+  const [list, staff, params] = await Promise.all([
     listRequests(),
     listActiveStaff(),
     searchParams,
   ])
 
+  const requestId = params.request ?? null
+
+  // Staff notification emails link to /admin?request=<id>, and the board only
+  // loads the newest slice. A link to anything older used to set the selection
+  // to an id that was not in the list, so the drawer rendered nothing at all --
+  // the link simply did nothing, with no error to explain it. Fetch the one row
+  // that is missing rather than widening the whole query.
+  const missing =
+    requestId && !list.requests.some((request) => request.id === requestId)
+      ? await getStaffRequestById(requestId)
+      : null
+
   return (
     <RequestsBoard
-      requests={requests}
+      requests={missing ? [missing, ...list.requests] : list.requests}
       actor={profile}
       staff={staff}
-      // Staff notification emails link to /admin?request=<id>; open it directly.
-      initialRequestId={params.request ?? null}
+      truncated={list.truncated}
+      total={list.total}
+      initialRequestId={requestId}
     />
   )
 }

@@ -88,6 +88,9 @@ export const ALLOWED_FILE_LABEL = 'JPG, PNG, PDF, or Word'
 export const uploadedFileSchema = z.object({
   name: requiredText('File name is required'),
   path: requiredText('File path is required'),
+
+  /** Issued by /api/uploads/sign and checked on submit; see lib/uploads. */
+  signature: requiredText('File signature is required'),
   size: z.number().int().min(0).max(MAX_FILE_BYTES, 'File exceeds the 100MB limit'),
   contentType: z.enum(ALLOWED_FILE_TYPES, {
     errorMap: () => ({ message: `Upload a ${ALLOWED_FILE_LABEL} file` }),
@@ -137,6 +140,89 @@ export const eventFields = {
 }
 
 const baseSchema = z.object({ ...contactFields, ...eventFields })
+
+/* -------------------------------------------------------------------------- */
+/* Abandoned branches                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Answers belonging to a branch the requestor did not choose.
+ *
+ * The wizard hides a question when its branch closes, but the answer stays in
+ * the form state, and `superRefine` only ever *requires* fields -- it never
+ * removes one. So someone who said photography was needed, entered three
+ * photographers, then switched to "no" still submitted `photographerCount: 3`.
+ * It was rendered in the staff email and on the tracking page under
+ * "Photographers required", and `summariseEffort` added it to the team's
+ * photographer total, inflating the effort chart with crew for a request that
+ * explicitly asked for no photography.
+ *
+ * Pruning happens in the schema rather than in the wizard so the API is covered
+ * too: these routes accept a JSON body from anyone, and a hand-rolled POST is
+ * exactly as able to carry a contradictory field as the form was.
+ */
+
+const AUDIO_MIC_FIELDS = ['micType', 'handheldCount', 'headsetCount', 'wiredCount'] as const
+const AUDIO_WIRELESS_ONLY = ['handheldCount', 'headsetCount'] as const
+const AUDIO_WIRED_ONLY = ['wiredCount'] as const
+
+const PHOTO_FIELDS = [
+  'photographerCount',
+  'photoPurpose',
+  'photoLocation',
+  'photoDeliverables',
+] as const
+const VIDEO_FIELDS = [
+  'videographerCount',
+  'videoType',
+  'videoAudience',
+  'videoLocation',
+  'videoFormat',
+  'videoDeadline',
+] as const
+
+const CONTENT_BRANCH_FIELDS = {
+  graphics: ['description', 'mobileVersion', 'horizontalVersion'],
+  video: ['videoBrief', 'videoDeadline'],
+  printing: ['printType', 'printDescription', 'quantity', 'width', 'height'],
+} as const satisfies Record<(typeof CONTENT_TYPES)[number], readonly string[]>
+
+function abandonedDetailKeys(team: Team, details: Record<string, unknown>): readonly string[] {
+  if (team === 'audio') {
+    if (details.requiresMics !== 'yes') return AUDIO_MIC_FIELDS
+    if (details.micType === 'wireless') return AUDIO_WIRED_ONLY
+    if (details.micType === 'wired') return AUDIO_WIRELESS_ONLY
+    return []
+  }
+
+  if (team === 'photo-video') {
+    return [
+      ...(details.requiresPhoto === 'yes' ? [] : PHOTO_FIELDS),
+      ...(details.requiresVideo === 'yes' ? [] : VIDEO_FIELDS),
+    ]
+  }
+
+  return Object.entries(CONTENT_BRANCH_FIELDS)
+    .filter(([type]) => type !== details.contentType)
+    .flatMap(([, fields]) => fields)
+}
+
+/**
+ * The answers as they should be stored: the chosen branch only.
+ *
+ * Exported so the review step can show exactly what will be submitted rather
+ * than everything the form happens to be holding.
+ */
+export function pruneDetails<T extends Record<string, unknown>>(team: Team, details: T): T {
+  const abandoned = abandonedDetailKeys(team, details)
+
+  if (abandoned.length === 0) return details
+
+  const pruned: Record<string, unknown> = { ...details }
+  for (const key of abandoned) delete pruned[key]
+
+  return pruned as T
+}
 
 /* -------------------------------------------------------------------------- */
 /* Audio                                                                      */
@@ -201,6 +287,7 @@ export const audioDetailsSchema = z
       })
     }
   })
+  .transform((value) => pruneDetails('audio', value))
 
 export type AudioDetails = z.infer<typeof audioDetailsSchema>
 
@@ -259,6 +346,7 @@ export const photoVideoDetailsSchema = z
       required('videoDeadline', value.videoDeadline, 'Enter the deadline for the completed video')
     }
   })
+  .transform((value) => pruneDetails('photo-video', value))
 
 export type PhotoVideoDetails = z.infer<typeof photoVideoDetailsSchema>
 
@@ -323,6 +411,7 @@ export const contentCreationDetailsSchema = z
       }
     }
   })
+  .transform((value) => pruneDetails('content-creation', value))
 
 export type ContentCreationDetails = z.infer<typeof contentCreationDetailsSchema>
 

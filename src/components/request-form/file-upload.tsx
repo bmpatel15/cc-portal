@@ -109,7 +109,13 @@ export function FileUpload({
     // the platform is an HTML error page, not JSON, so parsing it throws. Caught
     // here rather than at the batch level because only here is the filename
     // still known -- an error surfaced further up cannot say which file failed.
-    let signed: { success?: boolean; message?: string; path: string; token: string }
+    let signed: {
+      success?: boolean
+      message?: string
+      path: string
+      signature: string
+      token: string
+    }
 
     try {
       const response = await fetch('/api/uploads/sign', {
@@ -156,6 +162,7 @@ export function FileUpload({
     return {
       name: file.name,
       path: signed.path,
+      signature: signed.signature,
       size: file.size,
       contentType,
     }
