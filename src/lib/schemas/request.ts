@@ -62,6 +62,14 @@ const count = (message: string, min = 0) =>
 
 export const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100MB
 
+/**
+ * How many attachments one request may carry.
+ *
+ * The wizard enforces this before uploading rather than after, so an eleventh
+ * file is never pushed to storage and then quietly dropped from the form.
+ */
+export const MAX_FILES = 10
+
 /** Keep in sync with the bucket's allowed_mime_types in supabase/migrations. */
 export const ALLOWED_FILE_TYPES = [
   'image/jpeg',
@@ -303,19 +311,25 @@ export type ContentCreationDetails = z.infer<typeof contentCreationDetailsSchema
 const audioRequestSchema = baseSchema.extend({
   team: z.literal('audio'),
   details: audioDetailsSchema,
-  files: z.array(uploadedFileSchema).max(10).default([]),
+  files: z.array(uploadedFileSchema)
+    .max(MAX_FILES, `Attach at most ${MAX_FILES} files`)
+    .default([]),
 })
 
 const photoVideoRequestSchema = baseSchema.extend({
   team: z.literal('photo-video'),
   details: photoVideoDetailsSchema,
-  files: z.array(uploadedFileSchema).max(10).default([]),
+  files: z.array(uploadedFileSchema)
+    .max(MAX_FILES, `Attach at most ${MAX_FILES} files`)
+    .default([]),
 })
 
 const contentCreationRequestSchema = baseSchema.extend({
   team: z.literal('content-creation'),
   details: contentCreationDetailsSchema,
-  files: z.array(uploadedFileSchema).max(10).default([]),
+  files: z.array(uploadedFileSchema)
+    .max(MAX_FILES, `Attach at most ${MAX_FILES} files`)
+    .default([]),
 })
 
 /**
