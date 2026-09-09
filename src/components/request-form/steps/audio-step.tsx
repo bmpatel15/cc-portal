@@ -2,7 +2,12 @@
 
 import { useWatch } from 'react-hook-form'
 
-import { LOCATIONS } from '@/lib/schemas/request'
+import {
+  LOCATIONS,
+  MAX_HANDHELD_MICS,
+  MAX_HEADSET_MICS,
+  MAX_WIRED_MICS,
+} from '@/lib/schemas/request'
 
 import { NumberField, RadioField, SelectField, TextAreaField } from '../fields'
 import { FileUpload } from '../file-upload'
@@ -36,14 +41,32 @@ export function AudioStep() {
           <div className="space-y-1">
             <p className="text-sm font-medium">How many of each are needed?</p>
             <p className="text-sm text-muted-foreground">
-              Leave a kind blank if none are needed.
+              Leave a kind blank if none are needed. The counts stop at what the team owns.
             </p>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-3">
-            <NumberField name="details.handheldCount" label="Wireless handheld" min={0} />
-            <NumberField name="details.headsetCount" label="Wireless headset" min={0} />
-            <NumberField name="details.wiredCount" label="Wired" min={0} />
+            <NumberField
+              name="details.handheldCount"
+              label="Wireless handheld"
+              min={0}
+              max={MAX_HANDHELD_MICS}
+              description={`Up to ${MAX_HANDHELD_MICS}`}
+            />
+            <NumberField
+              name="details.headsetCount"
+              label="Wireless headset"
+              min={0}
+              max={MAX_HEADSET_MICS}
+              description={`Up to ${MAX_HEADSET_MICS}`}
+            />
+            <NumberField
+              name="details.wiredCount"
+              label="Wired"
+              min={0}
+              max={MAX_WIRED_MICS}
+              description={`Up to ${MAX_WIRED_MICS}`}
+            />
           </div>
         </div>
       ) : null}

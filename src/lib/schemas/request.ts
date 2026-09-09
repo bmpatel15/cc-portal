@@ -53,6 +53,29 @@ const yesNo = z.enum(['yes', 'no'])
 export type YesNo = z.infer<typeof yesNo>
 
 const requiredText = (message: string) => z.string().trim().min(1, message)
+
+/**
+ * A ceiling on a count, checked only for the branch that asked for it.
+ *
+ * These live in `superRefine` rather than on the field so that a count left
+ * behind by an abandoned branch -- about to be dropped by `pruneDetails` -- does
+ * not fail validation on a box the requestor can no longer see.
+ */
+function atMost(
+  ctx: z.RefinementCtx,
+  path: string,
+  value: number | undefined,
+  max: number,
+  what: string,
+) {
+  if (value !== undefined && value > max) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [path],
+      message: `There are only ${max} ${what}`,
+    })
+  }
+}
 const count = (message: string, min = 0) =>
   z.coerce.number({ invalid_type_error: message }).int(message).min(min, message)
 
@@ -79,6 +102,11 @@ export const MAX_FILES = 10
  */
 export const MAX_PHOTOGRAPHERS = 5
 export const MAX_VIDEOGRAPHERS = 3
+
+/** The same, for the mics in the cupboard. */
+export const MAX_HANDHELD_MICS = 10
+export const MAX_HEADSET_MICS = 4
+export const MAX_WIRED_MICS = 10
 
 /** Keep in sync with the bucket's allowed_mime_types in supabase/migrations. */
 export const ALLOWED_FILE_TYPES = [
@@ -150,17 +178,48 @@ export const LOCATIONS_WITH_OTHER = [...LOCATIONS, OTHER_OPTION] as const
 
 export const contactFields = {
   fullName: requiredText('Full name is required'),
-  email: z.string().trim().email('Enter a valid email address'),
+
+  // 254 is the longest address a mail server has to accept (RFC 5321), and the
+  // confirmation and tracking link are sent here -- an address nothing can
+  // deliver to makes the request unreachable.
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Email is required')
+    .max(254, 'Email address is too long')
+    .email('Enter a valid email address'),
   phone: z.string().trim().max(40, 'Phone number is too long').optional().or(z.literal('')),
   department: requiredText('Department is required'),
 }
 
+/**
+ * Midnight UTC on the day `at` falls on -- the instant the form stores a picked
+ * day at, so a stored date and today can be compared as the same kind of thing.
+ */
+export function startOfUtcDay(at: Date = new Date()): number {
+  return Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
 export const eventFields = {
   eventName: requiredText('Event name is required'),
-  eventDate: requiredText('Event date is required').refine(
-    (value) => !Number.isNaN(Date.parse(value)),
-    'Enter a valid date',
-  ),
+
+  /**
+   * A day that has already been and gone cannot be requested.
+   *
+   * The server runs in UTC while the requestor does not, so a whole day of slack
+   * sits under the check: at 9pm in New York it is already tomorrow in UTC, and
+   * an event later that same evening is still a real request. The wizard applies
+   * the exact rule against the requestor's own clock -- this is the backstop for
+   * anything posted straight at the API.
+   */
+  eventDate: requiredText('Event date is required')
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid date')
+    .refine(
+      (value) => Date.parse(value) >= startOfUtcDay() - DAY_MS,
+      'The event date cannot be in the past',
+    ),
 }
 
 const baseSchema = z.object({ ...contactFields, ...eventFields })
@@ -314,7 +373,14 @@ export const audioDetailsSchema = z
     audioDescription: z.string().trim().optional().or(z.literal('')),
   })
   .superRefine((value, ctx) => {
+    // Only the branch that was asked for is held to the ceilings. A count left
+    // behind by someone who switched microphones off is about to be pruned, and
+    // failing it here would block the form on a box that is no longer on screen.
     if (value.requiresMics !== 'yes') return
+
+    atMost(ctx, 'handheldCount', value.handheldCount, MAX_HANDHELD_MICS, 'wireless handheld mics')
+    atMost(ctx, 'headsetCount', value.headsetCount, MAX_HEADSET_MICS, 'wireless headsets')
+    atMost(ctx, 'wiredCount', value.wiredCount, MAX_WIRED_MICS, 'wired mics')
 
     // The three kinds are independent: an event can need two handhelds and a
     // wired mic at the podium. Each box may be left blank, so the only rule is
@@ -345,9 +411,7 @@ export const VIDEO_FORMATS = ['live', 'recorded', 'both'] as const
 export const photoVideoDetailsSchema = z
   .object({
     requiresPhoto: yesNo,
-    photographerCount: count('Enter a number of photographers', 1)
-      .max(MAX_PHOTOGRAPHERS, `At most ${MAX_PHOTOGRAPHERS} photographers can be requested`)
-      .optional(),
+    photographerCount: count('Enter a number of photographers', 1).optional(),
     photoPurpose: z.enum(PHOTO_PURPOSES).optional(),
     photoPurposeOther: z.string().trim().optional().or(z.literal('')),
     photoLocation: z.enum(LOCATIONS_WITH_OTHER).optional(),
@@ -356,9 +420,7 @@ export const photoVideoDetailsSchema = z
     photoDeliverables: z.string().trim().optional().or(z.literal('')),
 
     requiresVideo: yesNo,
-    videographerCount: count('Enter a number of videographers', 1)
-      .max(MAX_VIDEOGRAPHERS, `At most ${MAX_VIDEOGRAPHERS} videographers can be requested`)
-      .optional(),
+    videographerCount: count('Enter a number of videographers', 1).optional(),
     videoType: z.enum(VIDEO_TYPES).optional(),
     videoTypeOther: z.string().trim().optional().or(z.literal('')),
     videoAudience: z.string().trim().optional().or(z.literal('')),
@@ -394,12 +456,14 @@ export const photoVideoDetailsSchema = z
 
     if (value.requiresPhoto === 'yes') {
       required('photographerCount', value.photographerCount, 'Enter how many photographers are needed')
+      atMost(ctx, 'photographerCount', value.photographerCount, MAX_PHOTOGRAPHERS, 'photographers')
       required('photoPurpose', value.photoPurpose, 'Select the purpose of the photography')
       requireLocation('photoLocation', value.photoLocation, value.photoLocationOther)
     }
 
     if (value.requiresVideo === 'yes') {
       required('videographerCount', value.videographerCount, 'Enter how many videographers are needed')
+      atMost(ctx, 'videographerCount', value.videographerCount, MAX_VIDEOGRAPHERS, 'videographers')
       required('videoType', value.videoType, 'Select the type of video')
       requireLocation('videoLocation', value.videoLocation, value.videoLocationOther)
       required('videoFormat', value.videoFormat, 'Select live, recorded, or both')
