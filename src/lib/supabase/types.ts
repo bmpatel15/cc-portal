@@ -58,6 +58,9 @@ export interface NotificationRow {
   payload: Record<string, unknown>
   status: NotificationStatus
   attempts: number
+
+  /** Lease held by the dispatcher currently sending this row; see 0007. */
+  claimed_at: string | null
   last_error: string | null
   sent_at: string | null
   created_at: string
