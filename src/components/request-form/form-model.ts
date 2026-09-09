@@ -1,4 +1,5 @@
 import {
+  DEPARTMENT_OTHER,
   partialRequestSchema,
   schemaForTeam,
   type RequestInput,
@@ -18,6 +19,7 @@ export interface RequestFormValues {
   email: string
   phone: string
   department: string
+  departmentOther: string
   eventName: string
   eventDate: string
   eventTime: string
@@ -31,6 +33,7 @@ export const emptyFormValues: RequestFormValues = {
   email: '',
   phone: '',
   department: '',
+  departmentOther: '',
   eventName: '',
   eventDate: '',
   eventTime: '',
@@ -56,13 +59,24 @@ export function cleanValues(values: RequestFormValues) {
     fullName: values.fullName,
     email: values.email,
     phone: values.phone,
-    department: values.department,
+    department: resolveDepartment(values.department, values.departmentOther),
     eventName: values.eventName,
     eventDateTime: combineDateTime(values.eventDate, values.eventTime),
     team: values.team || undefined,
     details,
     files: values.files ?? [],
   }
+}
+
+/**
+ * The department as the API stores it: the picked option, or whatever was typed
+ * when the requestor picked "Other".
+ *
+ * Only the resolved value travels, so a stale "Other" answer left behind by
+ * someone who changed their mind cannot reach the record.
+ */
+export function resolveDepartment(department: string, other: string): string {
+  return department === DEPARTMENT_OTHER ? other.trim() : department
 }
 
 /**
@@ -113,15 +127,36 @@ export function validateValues(values: RequestFormValues): {
     message: issue.message,
   }))
 
-  // `eventDateTime` is not a field on this form, so an issue against it has no
-  // input to attach to and would be silently dropped by setError. Point at
-  // whichever half is actually missing instead -- and collapse them, since an
-  // empty value trips both the required check and the parse check.
-  const others = raw.filter((issue) => issue.path !== 'eventDateTime')
+  // Two schema fields are assembled from more than one input, so an issue
+  // against either has no field to attach to and setError would drop it
+  // silently -- the wizard would refuse to advance while highlighting nothing.
+  // Both are pointed at the input the requestor can actually act on.
+  const issues: ValidationIssue[] = []
+  let sawDateTime = false
+
+  for (const issue of raw) {
+    if (issue.path === 'eventDateTime') {
+      sawDateTime = true
+      continue
+    }
+
+    if (issue.path === 'department' && values.department === DEPARTMENT_OTHER) {
+      issues.push({ path: 'departmentOther', message: 'Enter your department' })
+      continue
+    }
+
+    issues.push(issue)
+  }
+
+  if (sawDateTime) issues.push(...dateTimeIssues(values))
+
+  // One message per input. An empty value can trip more than one check, and two
+  // errors stacked under one box reads as two separate problems.
+  const seen = new Set<string>()
 
   return {
     ok: false,
-    issues: others.length === raw.length ? others : [...others, ...dateTimeIssues(values)],
+    issues: issues.filter((issue) => !seen.has(issue.path) && seen.add(issue.path)),
   }
 }
 
@@ -164,7 +199,8 @@ export const STEPS: StepDefinition[] = [
     title: 'Your information',
     shortTitle: 'Info',
     description: 'So the team knows who to follow up with.',
-    owns: (path) => ['fullName', 'email', 'phone', 'department'].includes(path),
+    owns: (path) =>
+      ['fullName', 'email', 'phone', 'department', 'departmentOther'].includes(path),
   },
   {
     id: 'event',

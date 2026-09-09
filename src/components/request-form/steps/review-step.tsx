@@ -8,7 +8,12 @@ import { Separator } from '@/components/ui/separator'
 import { TEAM_LABELS, formatDetails, formatEventDateTime } from '@/lib/schemas/labels'
 import type { RequestDetails, Team } from '@/lib/schemas/request'
 
-import { combineDateTime, type RequestFormValues, type StepId } from '../form-model'
+import {
+  combineDateTime,
+  resolveDepartment,
+  type RequestFormValues,
+  type StepId,
+} from '../form-model'
 
 interface Row {
   label: string
@@ -66,7 +71,7 @@ export function ReviewStep({ onEditStep }: { onEditStep: (step: StepId) => void 
     { label: 'Full name', value: values.fullName },
     { label: 'Email', value: values.email },
     ...(values.phone ? [{ label: 'Phone', value: values.phone }] : []),
-    { label: 'Department', value: values.department },
+    { label: 'Department', value: resolveDepartment(values.department, values.departmentOther) },
   ].filter((row) => row.value)
 
   const eventRows: Row[] = [

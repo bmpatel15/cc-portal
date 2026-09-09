@@ -99,6 +99,28 @@ export type UploadedFile = z.infer<typeof uploadedFileSchema>
 /* Shared fields                                                              */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The departments a requestor can pick from.
+ *
+ * The values are the labels rather than slugs, because `department` is shown
+ * verbatim in the staff email, the admin drawer, the tracking page and the CSV
+ * export -- and because rows submitted before this was a dropdown hold free
+ * text. Keeping them human-readable means nothing downstream needs a lookup and
+ * old rows stay consistent with new ones.
+ */
+export const DEPARTMENTS = [
+  'Satsang Pravrutti',
+  'Services',
+  'CA/PA',
+  'Facilities',
+  'Network',
+  'IT',
+  'Other',
+] as const
+
+/** Picking this reveals a free-text box, and that answer is what gets stored. */
+export const DEPARTMENT_OTHER = 'Other'
+
 export const contactFields = {
   fullName: requiredText('Full name is required'),
   email: z.string().trim().email('Enter a valid email address'),
