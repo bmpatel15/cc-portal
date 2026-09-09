@@ -70,6 +70,16 @@ export const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100MB
  */
 export const MAX_FILES = 10
 
+/**
+ * The crew the team can actually staff.
+ *
+ * The form offers these as the only choices, so an unrealistic ask cannot be
+ * typed; the schema enforces them again because /api/requests takes a JSON body
+ * from anyone. One number, so the dropdown and the message cannot drift apart.
+ */
+export const MAX_PHOTOGRAPHERS = 5
+export const MAX_VIDEOGRAPHERS = 3
+
 /** Keep in sync with the bucket's allowed_mime_types in supabase/migrations. */
 export const ALLOWED_FILE_TYPES = [
   'image/jpeg',
@@ -124,6 +134,18 @@ export const DEPARTMENTS = [
 /** Picking this reveals a free-text box, and that answer is what gets stored. */
 export const DEPARTMENT_OTHER = 'Other'
 
+/**
+ * The places an event happens, shared by every team that asks where.
+ *
+ * Audio has always picked from this list; photo and video used to take free
+ * text, which spelled the same room four ways and could not be compared across
+ * requests. `LOCATION_OTHER` is the escape hatch for anywhere not listed -- the
+ * typed answer is folded into the location itself before it is stored.
+ */
+export const LOCATIONS = ['main-hall', 'gym', 'outdoors', 'bky-rooms'] as const
+export const LOCATION_OTHER = 'other'
+export const LOCATIONS_WITH_OTHER = [...LOCATIONS, LOCATION_OTHER] as const
+
 export const contactFields = {
   fullName: requiredText('Full name is required'),
   email: z.string().trim().email('Enter a valid email address'),
@@ -168,6 +190,8 @@ const PHOTO_FIELDS = [
   'photographerCount',
   'photoPurpose',
   'photoLocation',
+  'photoLocationOther',
+  'photoLocationNotes',
   'photoDeliverables',
 ] as const
 const VIDEO_FIELDS = [
@@ -175,6 +199,8 @@ const VIDEO_FIELDS = [
   'videoType',
   'videoAudience',
   'videoLocation',
+  'videoLocationOther',
+  'videoLocationNotes',
   'videoFormat',
   'videoDeadline',
 ] as const
@@ -214,6 +240,36 @@ function abandonedDetailKeys(team: Team, details: Record<string, unknown>): read
 }
 
 /**
+ * The answers as they should be stored: "Other" folded into the answer it
+ * qualifies.
+ *
+ * A location and the box that appears when "Other" is picked are one answer by
+ * the time anyone reads the record, exactly as a department and its "Other" box
+ * are (`resolveDepartment` in the wizard). Folding them here rather than in the
+ * form means the API is covered too, and the staff email shows one
+ * "Photography location: Backyard" line instead of "Other" and a second row.
+ *
+ * Exported for the review step, which previews the record before it exists.
+ */
+export function resolveDetails<T extends Record<string, unknown>>(team: Team, details: T): T {
+  if (team !== 'photo-video') return details
+
+  const resolved: Record<string, unknown> = { ...details }
+
+  for (const [location, other] of [
+    ['photoLocation', 'photoLocationOther'],
+    ['videoLocation', 'videoLocationOther'],
+  ] as const) {
+    if (resolved[location] === LOCATION_OTHER) {
+      resolved[location] = String(resolved[other] ?? '').trim()
+    }
+    delete resolved[other]
+  }
+
+  return resolved as T
+}
+
+/**
  * The answers as they should be stored: the chosen branch only.
  *
  * Exported so the review step can show exactly what will be submitted rather
@@ -234,11 +290,9 @@ export function pruneDetails<T extends Record<string, unknown>>(team: Team, deta
 /* Audio                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export const AUDIO_LOCATIONS = ['main-hall', 'gym', 'outdoors', 'bky-rooms'] as const
-
 export const audioDetailsSchema = z
   .object({
-    location: z.enum(AUDIO_LOCATIONS, {
+    location: z.enum(LOCATIONS, {
       errorMap: () => ({ message: 'Select a location' }),
     }),
     requiresMics: yesNo,
@@ -280,16 +334,24 @@ export const VIDEO_FORMATS = ['live', 'recorded', 'both'] as const
 export const photoVideoDetailsSchema = z
   .object({
     requiresPhoto: yesNo,
-    photographerCount: count('Enter a number of photographers', 1).optional(),
+    photographerCount: count('Enter a number of photographers', 1)
+      .max(MAX_PHOTOGRAPHERS, `At most ${MAX_PHOTOGRAPHERS} photographers can be requested`)
+      .optional(),
     photoPurpose: z.enum(PHOTO_PURPOSES).optional(),
-    photoLocation: z.string().trim().optional().or(z.literal('')),
+    photoLocation: z.enum(LOCATIONS_WITH_OTHER).optional(),
+    photoLocationOther: z.string().trim().optional().or(z.literal('')),
+    photoLocationNotes: z.string().trim().optional().or(z.literal('')),
     photoDeliverables: z.string().trim().optional().or(z.literal('')),
 
     requiresVideo: yesNo,
-    videographerCount: count('Enter a number of videographers', 1).optional(),
+    videographerCount: count('Enter a number of videographers', 1)
+      .max(MAX_VIDEOGRAPHERS, `At most ${MAX_VIDEOGRAPHERS} videographers can be requested`)
+      .optional(),
     videoType: z.enum(VIDEO_TYPES).optional(),
     videoAudience: z.string().trim().optional().or(z.literal('')),
-    videoLocation: z.string().trim().optional().or(z.literal('')),
+    videoLocation: z.enum(LOCATIONS_WITH_OTHER).optional(),
+    videoLocationOther: z.string().trim().optional().or(z.literal('')),
+    videoLocationNotes: z.string().trim().optional().or(z.literal('')),
     videoFormat: z.enum(VIDEO_FORMATS).optional(),
     videoDeadline: z.string().trim().optional().or(z.literal('')),
   })
@@ -308,23 +370,30 @@ export const photoVideoDetailsSchema = z
       })
     }
 
+    // "Other" is only half an answer: the box that appears beside it has to say
+    // where, or the record reads "Other" and nobody knows the room.
+    const requireLocation = (path: string, location: unknown, other: unknown) => {
+      required(path, location, 'Select a location')
+      if (location === LOCATION_OTHER) {
+        required(`${path}Other`, other, 'Enter the location')
+      }
+    }
+
     if (value.requiresPhoto === 'yes') {
       required('photographerCount', value.photographerCount, 'Enter how many photographers are needed')
       required('photoPurpose', value.photoPurpose, 'Select the purpose of the photography')
-      required('photoLocation', value.photoLocation, 'Describe the location and setting')
-      required('photoDeliverables', value.photoDeliverables, 'Describe the required deliverables')
+      requireLocation('photoLocation', value.photoLocation, value.photoLocationOther)
     }
 
     if (value.requiresVideo === 'yes') {
       required('videographerCount', value.videographerCount, 'Enter how many videographers are needed')
       required('videoType', value.videoType, 'Select the type of video')
-      required('videoAudience', value.videoAudience, 'Describe the intended use and audience')
-      required('videoLocation', value.videoLocation, 'Describe where the videography takes place')
+      requireLocation('videoLocation', value.videoLocation, value.videoLocationOther)
       required('videoFormat', value.videoFormat, 'Select live, recorded, or both')
       required('videoDeadline', value.videoDeadline, 'Enter the deadline for the completed video')
     }
   })
-  .transform((value) => pruneDetails('photo-video', value))
+  .transform((value) => pruneDetails('photo-video', resolveDetails('photo-video', value)))
 
 export type PhotoVideoDetails = z.infer<typeof photoVideoDetailsSchema>
 
@@ -439,6 +508,32 @@ function requirePrintArtwork(
   }
 }
 
+/**
+ * A video cannot be due before the event it films. Lives outside the details
+ * schema, which cannot see the event date, and outside the union members for the
+ * same reason `requirePrintArtwork` does.
+ */
+function requireDeadlineAfterEvent(
+  value: { eventDate: string; details: { videoDeadline?: string } },
+  ctx: z.RefinementCtx,
+) {
+  const deadline = value.details.videoDeadline
+  if (!deadline) return
+
+  // The event date is stored as midnight UTC, so the deadline is read the same
+  // way -- otherwise a day either side of it would compare by the hour.
+  const due = Date.parse(`${deadline}T00:00:00Z`)
+  const event = Date.parse(value.eventDate)
+
+  if (!Number.isNaN(due) && !Number.isNaN(event) && due < event) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['details', 'videoDeadline'],
+      message: 'The deadline cannot be before the event date',
+    })
+  }
+}
+
 export const requestSchema = z
   .discriminatedUnion('team', [
     audioRequestSchema,
@@ -447,6 +542,7 @@ export const requestSchema = z
   ])
   .superRefine((value, ctx) => {
     if (value.team === 'content-creation') requirePrintArtwork(value, ctx)
+    if (value.team === 'photo-video') requireDeadlineAfterEvent(value, ctx)
   })
 
 export type RequestInput = z.infer<typeof requestSchema>
@@ -458,7 +554,7 @@ export function schemaForTeam(team: Team) {
     case 'audio':
       return audioRequestSchema
     case 'photo-video':
-      return photoVideoRequestSchema
+      return photoVideoRequestSchema.superRefine(requireDeadlineAfterEvent)
     case 'content-creation':
       return contentCreationRequestSchema.superRefine(requirePrintArtwork)
   }

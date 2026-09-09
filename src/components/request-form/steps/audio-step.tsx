@@ -2,7 +2,7 @@
 
 import { useWatch } from 'react-hook-form'
 
-import { AUDIO_LOCATIONS } from '@/lib/schemas/request'
+import { LOCATIONS } from '@/lib/schemas/request'
 
 import { NumberField, RadioField, SelectField, TextAreaField } from '../fields'
 import { FileUpload } from '../file-upload'
@@ -18,7 +18,7 @@ export function AudioStep() {
         label="Location"
         required
         placeholder="Select a location"
-        choices={choicesFrom(AUDIO_LOCATIONS)}
+        choices={choicesFrom(LOCATIONS)}
       />
 
       <RadioField
