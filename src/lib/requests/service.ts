@@ -241,9 +241,16 @@ export async function listRequests(filters: ListFilters = {}): Promise<RequestWi
   if (filters.status) query = query.eq('status', filters.status)
   if (filters.team) query = query.eq('team', filters.team)
   if (filters.search) {
-    const term = `%${filters.search}%`
+    // PostgREST parses `or=(...)` as a comma-separated list of conditions, so a
+    // raw term containing `,` or `)` closes this filter and appends conditions
+    // of the caller's choosing -- `x,status.eq.complete` would quietly change
+    // which rows come back. Double-quoting the value makes it a literal, and
+    // the backslash escapes let a quote inside the term stay data.
+    const term = filters.search.replaceAll('\\', '\\\\').replaceAll('"', '\\"')
+    const like = `"%${term}%"`
+
     query = query.or(
-      `event_name.ilike.${term},full_name.ilike.${term},email.ilike.${term},department.ilike.${term}`,
+      `event_name.ilike.${like},full_name.ilike.${like},email.ilike.${like},department.ilike.${like}`,
     )
   }
 
