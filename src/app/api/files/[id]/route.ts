@@ -67,7 +67,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // 404 for someone who is merely signed out reads as a broken link rather than
   // as "sign in first".
   if (auth !== null && !auth.ok) {
-    return NextResponse.redirect(new URL('/login', request.url), 302)
+    const signIn = NextResponse.redirect(new URL('/login', request.url), 302)
+
+    // Whether this redirects at all depends on the caller's session, so it must
+    // not be reused for anyone else. Next's default here is `public`.
+    signIn.headers.set('Cache-Control', 'private, no-store')
+
+    return signIn
   }
 
   const { data, error } = await getAdminClient()
