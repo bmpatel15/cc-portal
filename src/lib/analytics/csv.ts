@@ -19,8 +19,16 @@
 const FORMULA_PREFIXES = ['=', '+', '-', '@', '\t', '\r']
 
 function neutralise(value: string): string {
-  if (value.length > 0 && FORMULA_PREFIXES.includes(value[0])) return `'${value}`
-  return value
+  if (value.length === 0 || !FORMULA_PREFIXES.includes(value[0])) return value
+
+  // A negative number is not a formula. `-` is in the list above because
+  // `-1+1` is one, but change percentages and lead times are routinely
+  // negative, and quoting those shipped them to Excel as left-aligned text
+  // that would not sum, average or chart. Number('-12.5') is finite;
+  // Number('-1+1') is not, so the real formulas are still caught.
+  if (Number.isFinite(Number(value))) return value
+
+  return `'${value}`
 }
 
 /** One field, quoted only when it has to be. */
