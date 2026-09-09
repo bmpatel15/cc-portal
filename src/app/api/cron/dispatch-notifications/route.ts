@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerEnv } from '@/lib/env'
 import { dispatchPending } from '@/lib/notifications/dispatch'
+import { getAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,19 @@ export async function GET(request: Request) {
 
   try {
     const summary = await dispatchPending()
+
+    // Rate-limit windows are only interesting for the hour they cover, so the
+    // daily tick is a free place to drop the rest. Failure here is not worth
+    // failing the dispatch over -- the rows are tiny and the next run retries.
+    const { error: sweepError } = await getAdminClient()
+      .from('upload_rate_limit')
+      .delete()
+      .lt('window_start', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+
+    if (sweepError) {
+      console.error('Failed to sweep upload_rate_limit:', sweepError.message)
+    }
+
     return NextResponse.json({ success: true, ...summary })
   } catch (error) {
     console.error('Notification dispatch failed:', error)
