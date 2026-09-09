@@ -12,6 +12,7 @@ import { getBrowserClient } from '@/lib/supabase/client'
 import {
   ALLOWED_FILE_EXTENSIONS,
   ALLOWED_FILE_LABEL,
+  MAX_FILES,
   MAX_FILE_BYTES,
   type UploadedFile,
 } from '@/lib/schemas/request'
@@ -21,6 +22,46 @@ import type { RequestFormValues } from './form-model'
 
 const BUCKET = 'cc-portal'
 const DEFAULT_HINT = `${ALLOWED_FILE_LABEL} · up to 100MB each`
+
+/**
+ * How many files to upload at once.
+ *
+ * Browsers allow about six connections per origin, so firing all ten at once
+ * means every one of them crawls and none finishes early -- the whole batch
+ * appears stuck. Three keeps the pipe busy while letting files land one by one.
+ */
+const UPLOAD_CONCURRENCY = 3
+
+/**
+ * Run `worker` over `items`, at most `limit` at a time, in order.
+ *
+ * `cursor++` needs no lock: JavaScript is single-threaded and nothing awaits
+ * between reading the index and incrementing it.
+ */
+async function runPool<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  let cursor = 0
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (cursor < items.length) {
+        const index = cursor++
+
+        try {
+          results[index] = { status: 'fulfilled', value: await worker(items[index]) }
+        } catch (reason) {
+          results[index] = { status: 'rejected', reason }
+        }
+      }
+    }),
+  )
+
+  return results
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -64,16 +105,27 @@ export function FileUpload({
       return null
     }
 
-    const response = await fetch('/api/uploads/sign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: file.name, contentType, size: file.size }),
-    })
+    // Both the fetch and the json() parse are inside the try: a 500 or 502 from
+    // the platform is an HTML error page, not JSON, so parsing it throws. Caught
+    // here rather than at the batch level because only here is the filename
+    // still known -- an error surfaced further up cannot say which file failed.
+    let signed: { success?: boolean; message?: string; path: string; token: string }
 
-    const signed = await response.json()
+    try {
+      const response = await fetch('/api/uploads/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, contentType, size: file.size }),
+      })
 
-    if (!response.ok || !signed.success) {
-      toast.error(signed.message ?? `Could not prepare ${file.name} for upload`)
+      signed = await response.json()
+
+      if (!response.ok || !signed.success) {
+        toast.error(signed.message ?? `Could not prepare ${file.name} for upload`)
+        return null
+      }
+    } catch {
+      toast.error(`Could not prepare ${file.name} for upload`)
       return null
     }
 
@@ -85,12 +137,19 @@ export function FileUpload({
     const payload =
       file.type === contentType ? file : new File([file], file.name, { type: contentType })
 
-    const { error: uploadError } = await getBrowserClient()
-      .storage.from(BUCKET)
-      .uploadToSignedUrl(signed.path, signed.token, payload, { contentType })
+    // Reports failure through `error` rather than by throwing, but a transport
+    // abort can still reject, and one aborted upload must not discard the rest.
+    try {
+      const { error: uploadError } = await getBrowserClient()
+        .storage.from(BUCKET)
+        .uploadToSignedUrl(signed.path, signed.token, payload, { contentType })
 
-    if (uploadError) {
-      toast.error(`Upload failed for ${file.name}: ${uploadError.message}`)
+      if (uploadError) {
+        toast.error(`Upload failed for ${file.name}: ${uploadError.message}`)
+        return null
+      }
+    } catch {
+      toast.error(`Upload failed for ${file.name}`)
       return null
     }
 
@@ -105,19 +164,65 @@ export function FileUpload({
   async function handleFiles(selected: FileList | null) {
     if (!selected || selected.length === 0) return
 
+    // The cap is applied before anything is uploaded. It used to be a slice
+    // afterwards, which meant the extra files were pushed to storage, paid for,
+    // and then dropped from the form without the user being told.
+    const remaining = MAX_FILES - (form.getValues('files') ?? []).length
+
+    if (remaining <= 0) {
+      toast.error(`You can attach at most ${MAX_FILES} files. Remove one first.`)
+      return
+    }
+
+    const incoming = Array.from(selected)
+    const accepted = incoming.slice(0, remaining)
+    const rejected = incoming.slice(remaining)
+
+    if (rejected.length > 0) {
+      // Named while the list is short enough to read, so the user can see which
+      // of their files did not make it rather than counting the ones that did.
+      toast.error(
+        rejected.length <= 3
+          ? `${rejected.map((file) => file.name).join(', ')} not attached — the limit is ${MAX_FILES} files.`
+          : `${rejected.length} files not attached — the limit is ${MAX_FILES} files.`,
+      )
+    }
+
     setUploading(true)
     form.clearErrors('files')
 
     try {
-      const results = await Promise.all(Array.from(selected).map(uploadOne))
-      const uploaded = results.filter((result): result is UploadedFile => result !== null)
+      // Settled rather than all-or-nothing: uploadOne is written not to throw,
+      // and this is the backstop if that ever stops being true. A single
+      // rejection must not discard files that already reached storage.
+      const results = await runPool(accepted, UPLOAD_CONCURRENCY, uploadOne)
+      const uploaded = results.flatMap((result) =>
+        result.status === 'fulfilled' && result.value ? [result.value] : [],
+      )
 
       if (uploaded.length > 0) {
         // Read at write time, not from the render closure: two overlapping drops
         // would otherwise clobber each other's additions.
-        form.setValue('files', [...(form.getValues('files') ?? []), ...uploaded].slice(0, 10))
-        toast.success(uploaded.length === 1 ? 'File uploaded' : `${uploaded.length} files uploaded`)
+        const before = form.getValues('files') ?? []
+        const next = [...before, ...uploaded].slice(0, MAX_FILES)
+
+        form.setValue('files', next)
+
+        // Counted from what actually landed in the form. Two overlapping drops
+        // each measure `remaining` before the other writes, so between them they
+        // can still overshoot the cap -- and the count the user is shown has to
+        // survive that.
+        const added = next.length - before.length
+
+        if (added > 0) {
+          toast.success(added === 1 ? 'File uploaded' : `${added} files uploaded`)
+        }
       }
+    } catch (error) {
+      // Both call sites invoke this as `void handleFiles(...)`, so without this
+      // the rejection is unhandled and the user just watches the spinner stop.
+      console.error('File upload batch failed:', error)
+      toast.error('Something went wrong while uploading. Please try again.')
     } finally {
       setUploading(false)
       if (inputRef.current) inputRef.current.value = ''

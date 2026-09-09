@@ -73,6 +73,30 @@ function resolveRecipient(row: NotificationRow): string {
   return row.channel === 'telegram' ? telegramRecipient() : staffEmailRecipient()
 }
 
+/**
+ * Take exclusive ownership of queue rows, and return only what this process may
+ * send. A row missing from the result is being handled somewhere else -- that is
+ * the point, not a failure.
+ *
+ * MAX_ATTEMPTS is passed in rather than left to the SQL default so the ceiling
+ * has one home. The lease duration is the opposite: nothing here needs to know
+ * it, so it stays in the migration.
+ */
+async function claimNotifications(options: {
+  limit: number
+  ids?: string[]
+}): Promise<NotificationRow[]> {
+  const { data, error } = await getAdminClient().rpc('claim_notifications', {
+    p_limit: options.limit,
+    p_max_attempts: MAX_ATTEMPTS,
+    p_ids: options.ids ?? null,
+  })
+
+  if (error) throw new Error(`Failed to claim notifications: ${error.message}`)
+
+  return (data ?? []) as NotificationRow[]
+}
+
 async function send(row: NotificationRow): Promise<void> {
   const recipient = resolveRecipient(row)
 
@@ -91,7 +115,12 @@ async function send(row: NotificationRow): Promise<void> {
   await sendTelegramMessage(payload.text, recipient)
 }
 
-/** Attempt one queued message and record the outcome. Resolves either way. */
+/**
+ * Attempt one already-claimed message and record the outcome. Resolves either way.
+ *
+ * `attempts` is not touched: the claim incremented it, in SQL, where concurrent
+ * dispatchers cannot lose the increment.
+ */
 export async function dispatchNotification(row: NotificationRow): Promise<boolean> {
   const supabase = getAdminClient()
 
@@ -102,9 +131,9 @@ export async function dispatchNotification(row: NotificationRow): Promise<boolea
       .from('notification_log')
       .update({
         status: 'sent',
-        attempts: row.attempts + 1,
         last_error: null,
         sent_at: new Date().toISOString(),
+        claimed_at: null,
       })
       .eq('id', row.id)
 
@@ -113,12 +142,14 @@ export async function dispatchNotification(row: NotificationRow): Promise<boolea
     const message = error instanceof Error ? error.message : String(error)
     console.error(`Notification ${row.id} (${row.channel}/${row.template}) failed:`, message)
 
+    // The lease is released rather than left to expire: a failed row should be
+    // retryable on the next tick instead of sitting out the rest of it.
     await supabase
       .from('notification_log')
       .update({
         status: 'failed',
-        attempts: row.attempts + 1,
         last_error: message.slice(0, 1000),
+        claimed_at: null,
       })
       .eq('id', row.id)
 
@@ -129,9 +160,20 @@ export async function dispatchNotification(row: NotificationRow): Promise<boolea
 /**
  * Best-effort immediate delivery. Failures stay in the queue for the cron
  * dispatcher, so the caller can safely ignore the result.
+ *
+ * Claims first, even though it just inserted these rows. This is the *primary*
+ * duplicate window, not the cron one: the insert makes a row visible to the
+ * dispatcher before this line has sent it.
  */
 export async function deliverNow(rows: NotificationRow[]): Promise<void> {
-  await Promise.allSettled(rows.map((row) => dispatchNotification(row)))
+  if (rows.length === 0) return
+
+  const claimed = await claimNotifications({
+    limit: rows.length,
+    ids: rows.map((row) => row.id),
+  })
+
+  await Promise.allSettled(claimed.map((row) => dispatchNotification(row)))
 }
 
 /** Queue and immediately attempt delivery, swallowing queue errors. */
@@ -155,26 +197,18 @@ export interface DispatchSummary {
 export async function dispatchPending(limit = 25): Promise<DispatchSummary> {
   const supabase = getAdminClient()
 
-  const { data, error } = await supabase
-    .from('notification_log')
-    .select('*')
-    .in('status', ['pending', 'failed'])
-    .lt('attempts', MAX_ATTEMPTS)
-    .order('created_at', { ascending: true })
-    .limit(limit)
-
-  if (error) throw new Error(`Failed to load pending notifications: ${error.message}`)
-
-  const rows = (data ?? []) as NotificationRow[]
+  const rows = await claimNotifications({ limit })
   const results = await Promise.allSettled(rows.map((row) => dispatchNotification(row)))
 
   const sent = results.filter((result) => result.status === 'fulfilled' && result.value).length
 
+  // Not `status = failed`: a row whose final attempt crashed mid-send is left
+  // `pending` with its attempts spent, and is just as exhausted.
   const { count } = await supabase
     .from('notification_log')
     .select('id', { count: 'exact', head: true })
-    .eq('status', 'failed')
     .gte('attempts', MAX_ATTEMPTS)
+    .neq('status', 'sent')
 
   return {
     claimed: rows.length,

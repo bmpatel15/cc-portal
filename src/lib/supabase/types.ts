@@ -31,7 +31,9 @@ export interface RequestFileRow {
   request_id: string
   name: string
   storage_path: string
-  url: string
+
+  /** Legacy. Nothing reads or writes this; links come from /api/files/<id>. */
+  url: string | null
   size_bytes: number
   content_type: string
   created_at: string
@@ -56,6 +58,9 @@ export interface NotificationRow {
   payload: Record<string, unknown>
   status: NotificationStatus
   attempts: number
+
+  /** Lease held by the dispatcher currently sending this row; see 0007. */
+  claimed_at: string | null
   last_error: string | null
   sent_at: string | null
   created_at: string

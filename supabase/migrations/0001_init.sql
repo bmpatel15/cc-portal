@@ -236,14 +236,15 @@ create policy "staff read notifications" on public.notification_log
 /* -------------------------------------------------------------------------- */
 
 -- The bucket already exists in this project; this keeps a fresh environment in sync.
--- The mime list is kept identical to 0004_word_uploads.sql: the on-conflict
--- clause below is a declarative sync, so a stale array here would silently
--- revert 0004 the next time this file is re-run.
+-- The mime list is kept identical to 0004_word_uploads.sql, and `public` to
+-- 0005_private_file_access.sql: the on-conflict clause below is a declarative
+-- sync, so a stale value here would silently revert either of them the next
+-- time this file is re-run.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'cc-portal',
   'cc-portal',
-  true,
+  false,
   104857600, -- 100MB
   array[
     'image/jpeg',
@@ -259,7 +260,11 @@ on conflict (id) do update
       allowed_mime_types = excluded.allowed_mime_types;
 
 -- Uploads are performed with short-lived signed upload URLs minted server-side,
--- so no anon insert policy is needed. Reads stay public to match existing behaviour.
+-- so no anon insert policy is needed.
+--
+-- Reads have no policy either. This file used to grant `select` to the `public`
+-- role, which handed every attachment to anyone holding the anon key; see
+-- 0005_private_file_access.sql. Downloads now go through GET /api/files/[id],
+-- which authorises the caller and returns a short-lived signed URL signed by the
+-- service role -- and that bypasses RLS, so nothing needs granting here.
 drop policy if exists "public read cc-portal" on storage.objects;
-create policy "public read cc-portal" on storage.objects
-  for select to public using (bucket_id = 'cc-portal');
