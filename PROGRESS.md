@@ -71,6 +71,11 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#9 are merged to `main`.
 
+- **2026-10-18:** Test submission: Telegram sent; both emails (staff to `tpa.mmcc@gmail.com`,
+  submitter confirmation) failed with Gmail `535-5.7.8 BadCredentials`. The SMTP login
+  (`EMAIL_USER`/`EMAIL_PASS`) has been rejected since at least 2026-10-11; the last successful email
+  was 2026-09-09. Recipient routing is correct. Diagnosed via the Supabase MCP (enabled in
+  `.claude/settings.local.json`) by querying `notification_log`.
 - **2026-10-18:** `EMAIL_TO=tpa.mmcc@gmail.com` set in Vercel and redeployed (by the user).
 - **2026-10-18:** Created this file. Set the staff recipient to `tpa.mmcc@gmail.com` in
   `.env.example` (commit c929573).
@@ -89,6 +94,9 @@ Newest first. PRs #1–#9 are merged to `main`.
 ## Open items
 
 - [x] Set `EMAIL_TO=tpa.mmcc@gmail.com` in Vercel and redeploy. Done 2026-10-18.
-- [ ] Confirm the next real submission arrives at `tpa.mmcc@gmail.com`.
+- [ ] **Fix SMTP login:** create a new Gmail App Password for the `EMAIL_USER` account, set it as
+      `EMAIL_PASS` in Vercel, redeploy. Until then, no email is sent (Telegram still works).
+- [ ] Then confirm a submission arrives at `tpa.mmcc@gmail.com`. Check with
+      `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
 - [ ] Maybe later: version releases (git tags and GitHub Releases, with the `package.json`
       version kept in step; currently `0.2.0`).
