@@ -62,7 +62,8 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
 Env vars live in **Vercel → Project → Settings → Environment Variables** (and `.env.local` for local
 dev, which is not in the repo). `.env.example` only documents them.
 
-- `EMAIL_TO` is where new-request notifications go. Intended value: `tpa.mmcc@gmail.com`.
+- `EMAIL_TO` is where new-request notifications go. Live value: `tpa.mmcc@gmail.com` (set in Vercel
+  2026-10-18). `EMAIL_USER`/`EMAIL_PASS` belong to the *sending* account and are separate.
 - Supabase project ref: `nbalilmcrgfgvfwepbhk` (see `.mcp.json`; the MCP server is disabled
   locally in `.claude/settings.local.json`).
 
@@ -70,8 +71,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#9 are merged to `main`.
 
+- **2026-10-18:** `EMAIL_TO=tpa.mmcc@gmail.com` set in Vercel and redeployed (by the user).
 - **2026-10-18:** Created this file. Set the staff recipient to `tpa.mmcc@gmail.com` in
-  `.env.example`. The live value must also be changed in Vercel (see Open items).
+  `.env.example` (commit c929573).
 - **PR #9:** Reject past event dates; cap mic requests at what the team has in stock.
 - **PR #8:** Photo/video caps on staff numbers; "Other" free text for purpose and video type.
 - **PR #7:** Event date only (no time); audio can request wired and wireless mics together.
@@ -86,5 +88,7 @@ Newest first. PRs #1–#9 are merged to `main`.
 
 ## Open items
 
-- [ ] **Set `EMAIL_TO=tpa.mmcc@gmail.com` in Vercel** (Production, plus Preview if used), then
-      redeploy. Until that's done, emails still go to the old address.
+- [x] Set `EMAIL_TO=tpa.mmcc@gmail.com` in Vercel and redeploy. Done 2026-10-18.
+- [ ] Confirm the next real submission arrives at `tpa.mmcc@gmail.com`.
+- [ ] Maybe later: version releases (git tags and GitHub Releases, with the `package.json`
+      version kept in step; currently `0.2.0`).
