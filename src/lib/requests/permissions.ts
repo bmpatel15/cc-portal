@@ -138,6 +138,16 @@ export function canManageProfile(actor: Actor, profileId: string): Permission {
   return allow
 }
 
+/**
+ * Removing an account follows the same rule as managing one: admin-only, and
+ * never yourself, so the last admin cannot delete their way out of the project.
+ */
+export function canRemoveProfile(actor: Actor, profileId: string): Permission {
+  if (!isAdmin(actor)) return deny('Only an admin can remove team members')
+  if (profileId === actor.id) return deny('You cannot remove your own account')
+  return allow
+}
+
 /** Accounts are created by invitation only, and only an admin may send one. */
 export function canInviteStaff(actor: Actor): Permission {
   if (!isAdmin(actor)) return deny('Only an admin can invite team members')

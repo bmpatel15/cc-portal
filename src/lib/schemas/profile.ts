@@ -22,6 +22,11 @@ export const profileUpdateSchema = z.object({
 })
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>
 
+export const profileRemoveSchema = z.object({
+  profileId: z.string().uuid(),
+})
+export type ProfileRemove = z.infer<typeof profileRemoveSchema>
+
 /** An admin adding someone to the team. There is no self-service sign-up. */
 export const inviteSchema = z.object({
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),

@@ -4,12 +4,20 @@ import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { ArrowLeft, Loader2, UserPlus } from 'lucide-react'
+import { ArrowLeft, Loader2, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -31,7 +39,7 @@ import { displayName } from '@/lib/profiles/display'
 import { USER_ROLES } from '@/lib/schemas/profile'
 import type { ProfileRow, UserRole } from '@/lib/supabase/types'
 
-import { inviteStaffAction, updateProfileAction } from './actions'
+import { inviteStaffAction, removeProfileAction, updateProfileAction } from './actions'
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
@@ -49,6 +57,8 @@ export function UsersTable({
   // Track the row being saved so only that row's controls freeze.
   const [saving, setSaving] = React.useState<string | null>(null)
   const [pending, startTransition] = React.useTransition()
+  // The row awaiting confirmation in the remove dialog.
+  const [removing, setRemoving] = React.useState<ProfileRow | null>(null)
 
   const waiting = profiles.filter((profile) => !profile.is_active).length
 
@@ -64,6 +74,24 @@ export function UsersTable({
 
       if (result.success) {
         toast.success(result.message)
+        router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+
+      setSaving(null)
+    })
+  }
+
+  function remove(profile: ProfileRow) {
+    setSaving(profile.id)
+
+    startTransition(async () => {
+      const result = await removeProfileAction({ profileId: profile.id })
+
+      if (result.success) {
+        toast.success(result.message)
+        setRemoving(null)
         router.refresh()
       } else {
         toast.error(result.message)
@@ -89,8 +117,8 @@ export function UsersTable({
           <CardTitle>Team</CardTitle>
           <CardDescription>
             Staff can claim unassigned requests and advance their own; admins can reassign,
-            reopen, and cancel anything. Revoke access to suspend someone without deleting their
-            history.
+            reopen, and cancel anything. Revoke access to suspend someone, or remove them to delete
+            their account; their history is kept either way.
             {waiting > 0
               ? ` ${waiting} account${waiting === 1 ? '' : 's'} waiting for approval.`
               : ''}
@@ -171,6 +199,16 @@ export function UsersTable({
                             'Approve'
                           )}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          className="text-destructive hover:text-destructive"
+                          aria-label={`Remove ${displayName(profile)}`}
+                          onClick={() => setRemoving(profile)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     )}
                   </TableCell>
@@ -181,6 +219,39 @@ export function UsersTable({
         </Table>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(removing)}
+        onOpenChange={(open) => !open && !pending && setRemoving(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove {removing ? displayName(removing) : 'team member'}?</DialogTitle>
+            <DialogDescription>
+              This deletes {removing?.email ?? 'their'} account for good, so they can no longer sign
+              in. Any requests assigned to them go back to unassigned, and the history they left
+              stays. To bring them back later, send a new invite.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setRemoving(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={pending}
+              onClick={() => removing && remove(removing)}
+            >
+              {pending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
