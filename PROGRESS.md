@@ -74,6 +74,10 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#10 are merged to `main`.
 
+- **2026-10-21:** Supabase Auth SMTP fixed. The cause was the Username: the App Password belongs to
+  `tpa.mmcc@gmail.com`, so Username and Sender must be that address. Invites send again (23:40
+  UTC). `jigbpatel2001@gmail.com` was re-invited and is active Staff.
+
 - **2026-10-21:** Vercel `EMAIL_PASS` is fixed: app emails send again (staff and submitter, from
   11:56 UTC). Supabase Auth SMTP is still rejected (`535`) on an invite at 23:28 UTC, so the
   Supabase SMTP settings still hold bad credentials.
@@ -111,10 +115,9 @@ Newest first. PRs #1–#10 are merged to `main`.
 
 - [x] Set `EMAIL_TO=tpa.mmcc@gmail.com` in Vercel and redeploy. Done 2026-10-18.
 - [x] New Gmail App Password set as `EMAIL_PASS` in Vercel. App emails work (2026-10-21).
-- [ ] **Supabase Auth SMTP still rejected:** check username = `EMAIL_USER`, retype the App Password
-      (no spaces), host `smtp.gmail.com`, port 465, and Save. Until then invites and magic links fail.
-- [ ] Then re-send the invite to `tpa.mmcc@gmail.com`.
-- [ ] Then confirm a submission arrives at `tpa.mmcc@gmail.com`. Check with
+- [x] Supabase Auth SMTP: Username/Sender `tpa.mmcc@gmail.com` + same App Password. Fixed
+      2026-10-21.
+- [x] Confirmed submissions arrive at `tpa.mmcc@gmail.com` (2026-10-21). To check delivery:
       `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
 - [ ] Maybe later: version releases (git tags and GitHub Releases, with the `package.json`
       version kept in step; currently `0.2.0`).
