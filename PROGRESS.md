@@ -76,7 +76,7 @@ Newest first. PRs #1–#10 are merged to `main`.
 
 - **2026-10-21:** Supabase Auth SMTP fixed. The cause was the Username: the App Password belongs to
   `tpa.mmcc@gmail.com`, so Username and Sender must be that address. Invites send again (23:40
-  UTC). `jigbpatel2001@gmail.com` was re-invited as a test, then removed from the Team page.
+  UTC). `jigbpatel2001@gmail.com` was re-invited, then removed from the Team page.
 
 - **2026-10-21:** Vercel `EMAIL_PASS` is fixed: app emails send again (staff and submitter, from
   11:56 UTC). Supabase Auth SMTP is still rejected (`535`) on an invite at 23:28 UTC, so the
