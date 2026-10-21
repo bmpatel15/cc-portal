@@ -60,6 +60,21 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
   photographers and 3 videographers; up to 10 handheld, 4 headset, and 10 wired mics. Event dates
   can't be in the past.
 
+## Releases
+
+Semantic versions, kept in step across `package.json`, a git tag, and a GitHub Release. Bump
+**patch** for fixes, **minor** for new features, **major** for breaking changes. From a clean,
+up-to-date `main`:
+
+```sh
+npm version minor -m "Release %s"   # bumps package.json + lockfile, commits, tags vX.Y.Z
+git push --follow-tags
+```
+
+Pushing the tag runs `.github/workflows/release.yml`. It checks that the tag matches
+`package.json` and publishes a Release whose notes list the PRs merged since the last tag. Vercel
+deploys from `main` as usual, so releases are labels, not deploy triggers.
+
 ## Configuration
 
 Env vars live in **Vercel → Project → Settings → Environment Variables** (and `.env.local` for local
@@ -81,6 +96,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 ## Log
 
 Newest first. PRs #1–#10 are merged to `main`.
+
+- **v0.3.0 (2026-10-21):** First GitHub Release, covering PRs #1–#10. Added the release workflow
+  and tagged `v0.2.0` at fa3e1db (analytics layer) as the starting point.
 
 - **2026-10-21:** Email fully working again. Request emails were fixed first, with a new App
   Password in Vercel `EMAIL_PASS` (sending from 11:56 UTC). Invites still failed with `535` because
@@ -120,5 +138,4 @@ Newest first. PRs #1–#10 are merged to `main`.
       2026-10-21.
 - [x] Confirmed submissions arrive at `tpa.mmcc@gmail.com` (2026-10-21). To check delivery:
       `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
-- [ ] Maybe later: version releases (git tags and GitHub Releases, with the `package.json`
-      version kept in step; currently `0.2.0`).
+- [x] Version releases set up (2026-10-21). See **Releases**.

@@ -1,0 +1,32 @@
+# Publishes a GitHub Release whenever a version tag is pushed.
+# Cut one with `npm version patch|minor|major && git push --follow-tags`.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag and package.json must agree, or the release would name a
+      # version the app does not report.
+      - name: Check the tag matches package.json
+        run: |
+          expected="v$(jq -r .version package.json)"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json ($expected)" >&2
+            exit 1
+          fi
+
+      # Notes list the PRs merged since the previous tag.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
