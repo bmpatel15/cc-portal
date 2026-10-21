@@ -4,7 +4,7 @@ Working memory for this project. Read this first instead of re-reading the whole
 update the **Log** and **Open items** at the end of every change. `README.md` covers setup and the
 design decisions in more depth.
 
-_Last updated: 2026-10-18_
+_Last updated: 2026-10-21_
 
 ## What this is
 
@@ -62,6 +62,9 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
 Env vars live in **Vercel → Project → Settings → Environment Variables** (and `.env.local` for local
 dev, which is not in the repo). `.env.example` only documents them.
 
+- **Supabase Auth also sends mail through Gmail SMTP** (Dashboard → Authentication → SMTP
+  Settings), using the same Gmail account. Invites and magic links fail when that password is
+  stale, with "Error sending invite email" in the UI.
 - `EMAIL_TO` is where new-request notifications go. Live value: `tpa.mmcc@gmail.com` (set in Vercel
   2026-10-18). `EMAIL_USER`/`EMAIL_PASS` belong to the *sending* account and are separate.
 - Supabase project ref: `nbalilmcrgfgvfwepbhk` (see `.mcp.json`; the MCP server is disabled
@@ -70,6 +73,15 @@ dev, which is not in the repo). `.env.example` only documents them.
 ## Log
 
 Newest first. PRs #1–#9 are merged to `main`.
+
+- **2026-10-21:** Admins can remove team members (trash icon on the Team page, with a confirm
+  dialog). `removeProfile` deletes the auth user; FKs null out assignment and history. Same rule as
+  role changes: admin-only, never yourself (`canRemoveProfile`).
+- **2026-10-21:** Deleted the pending staff account `jigbpatel2001@gmail.com` (asked to remove
+  "Jigisha Patel") via SQL on `auth.users`. Its one assigned request is now unassigned.
+- **2026-10-21:** An admin's invite to `tpa.mmcc@gmail.com` failed with "Error sending invite
+  email". Auth logs show the same Gmail `535 BadCredentials`: Supabase Auth's custom SMTP uses the
+  stale password too. No partial account was left behind.
 
 - **2026-10-18:** Test submission: Telegram sent; both emails (staff to `tpa.mmcc@gmail.com`,
   submitter confirmation) failed with Gmail `535-5.7.8 BadCredentials`. The SMTP login
@@ -95,7 +107,9 @@ Newest first. PRs #1–#9 are merged to `main`.
 
 - [x] Set `EMAIL_TO=tpa.mmcc@gmail.com` in Vercel and redeploy. Done 2026-10-18.
 - [ ] **Fix SMTP login:** create a new Gmail App Password for the `EMAIL_USER` account, set it as
-      `EMAIL_PASS` in Vercel, redeploy. Until then, no email is sent (Telegram still works).
+      `EMAIL_PASS` in Vercel, redeploy, **and** paste it into Supabase → Authentication → SMTP
+      Settings. Until then, no email is sent and invites fail (Telegram still works).
+- [ ] Then re-send the invite to `tpa.mmcc@gmail.com`.
 - [ ] Then confirm a submission arrives at `tpa.mmcc@gmail.com`. Check with
       `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
 - [ ] Maybe later: version releases (git tags and GitHub Releases, with the `package.json`

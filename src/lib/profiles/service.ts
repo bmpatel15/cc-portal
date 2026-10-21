@@ -1,5 +1,10 @@
-import { canInviteStaff, canManageProfile, type Actor } from '@/lib/requests/permissions'
-import type { Invite, ProfileUpdate } from '@/lib/schemas/profile'
+import {
+  canInviteStaff,
+  canManageProfile,
+  canRemoveProfile,
+  type Actor,
+} from '@/lib/requests/permissions'
+import type { Invite, ProfileRemove, ProfileUpdate } from '@/lib/schemas/profile'
 import { getAdminClient } from '@/lib/supabase/admin'
 import type { ProfileRow, ProfileSummary } from '@/lib/supabase/types'
 import { authCallbackUrl } from '@/lib/urls'
@@ -95,4 +100,21 @@ export async function updateProfile(values: ProfileUpdate, actor: Actor): Promis
     .eq('id', values.profileId)
 
   if (error) throw new Error(`Failed to update the team member: ${error.message}`)
+}
+
+/**
+ * Delete someone's account outright.
+ *
+ * Deleting the auth user cascades to `profiles`; every reference to a profile
+ * (`requests.assigned_to`, `request_status_history.changed_by`,
+ * `time_entries.staff_id`) is `on delete set null`, so their requests go back
+ * to unassigned and the history stays, just without a name attached.
+ */
+export async function removeProfile(values: ProfileRemove, actor: Actor): Promise<void> {
+  const permitted = canRemoveProfile(actor, values.profileId)
+  if (!permitted.ok) throw new Error(permitted.reason)
+
+  const { error } = await getAdminClient().auth.admin.deleteUser(values.profileId)
+
+  if (error) throw new Error(`Failed to remove the team member: ${error.message}`)
 }
