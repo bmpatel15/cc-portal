@@ -27,7 +27,7 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
 | Request reads/writes, status changes, assignment | `src/lib/requests/service.ts` |
 | Who may do what (authority, not RLS) | `src/lib/requests/permissions.ts` |
 | Admin board and detail dialog, server actions | `src/app/admin/` (`requests-board.tsx`, `request-detail-dialog.tsx`, `actions.ts`) |
-| Team/user management (admin only) | `src/app/admin/users/` |
+| Team/user management: invite, role, revoke, remove (admin only) | `src/app/admin/users/`, `src/lib/profiles/service.ts` |
 | Analytics dashboard, CSV/PDF export | `src/app/admin/analytics/`, `src/lib/analytics/`, `src/app/api/admin/analytics/export/route.ts` |
 | Public tracking page | `src/app/track/[token]/page.tsx` |
 | File uploads (signed URLs, rate-limited) and file access | `src/app/api/uploads/sign/route.ts`, `src/lib/uploads/signature.ts`, `src/app/api/files/[id]/route.ts`, `src/lib/files.ts` |
@@ -52,6 +52,9 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
 - **Permissions:** the dashboard uses the service-role client, so RLS does not apply to it. Every
   mutation must call `permissions.ts`. Staff claim unassigned work and move it forward only
   (`pending → in_progress → review → complete`). Admins can reassign, reopen, and cancel.
+- **Team:** accounts exist only by admin invite (no self sign-up). Admins can change role, revoke
+  (suspend) or remove (delete) anyone but themselves. Removing deletes the auth user; requests they
+  held go back to unassigned and their history stays with no name attached.
 - **Tracking tokens** are never queryable by `anon`. The track page looks them up server-side.
 - **Current limits** (from `request.ts`): 10 files, 100 MB each (JPG/PNG/PDF/Word); up to 5
   photographers and 3 videographers; up to 10 handheld, 4 headset, and 10 wired mics. Event dates
@@ -62,35 +65,33 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
 Env vars live in **Vercel → Project → Settings → Environment Variables** (and `.env.local` for local
 dev, which is not in the repo). `.env.example` only documents them.
 
-- **Supabase Auth also sends mail through Gmail SMTP** (Dashboard → Authentication → SMTP
-  Settings), using the same Gmail account. Invites and magic links fail when that password is
-  stale, with "Error sending invite email" in the UI.
-- `EMAIL_TO` is where new-request notifications go. Live value: `tpa.mmcc@gmail.com` (set in Vercel
-  2026-10-18). `EMAIL_USER`/`EMAIL_PASS` belong to the *sending* account and are separate.
-- Supabase project ref: `nbalilmcrgfgvfwepbhk` (see `.mcp.json`; the MCP server is disabled
-  locally in `.claude/settings.local.json`).
+- **Email goes out two ways, both through Gmail SMTP as `tpa.mmcc@gmail.com`:**
+  - App emails (request notifications, status updates): Vercel `EMAIL_USER`/`EMAIL_PASS`.
+  - Invites and magic links: **Supabase → Authentication → SMTP Settings** (Username and Sender
+    `tpa.mmcc@gmail.com`, host `smtp.gmail.com`, port 465).
+  - Both use the same Gmail App Password. An App Password only works with the account that made
+    it. If it changes, update **both** places. A wrong one shows as Gmail `535 BadCredentials`
+    (in `notification_log.last_error` for app emails, in Supabase auth logs for invites; the UI
+    says "Error sending invite email").
+- `EMAIL_TO` is where new-request notifications go. Live value: `tpa.mmcc@gmail.com`.
+- Supabase project ref: `nbalilmcrgfgvfwepbhk` (see `.mcp.json`). The Supabase MCP is enabled
+  locally in `.claude/settings.local.json`, so Claude can query tables and auth logs directly.
+- **Team (2026-10-21):** two active admins, `bpatel501@gmail.com` and `anuvrutti3035@gmail.com`.
 
 ## Log
 
 Newest first. PRs #1–#10 are merged to `main`.
 
-- **2026-10-21:** Supabase Auth SMTP fixed. The cause was the Username: the App Password belongs to
-  `tpa.mmcc@gmail.com`, so Username and Sender must be that address. Invites send again (23:40
-  UTC). `jigbpatel2001@gmail.com` was re-invited, then removed from the Team page.
-
-- **2026-10-21:** Vercel `EMAIL_PASS` is fixed: app emails send again (staff and submitter, from
-  11:56 UTC). Supabase Auth SMTP is still rejected (`535`) on an invite at 23:28 UTC, so the
-  Supabase SMTP settings still hold bad credentials.
-
-- **PR #10 (2026-10-21):** Admins can remove team members (trash icon on the Team page, with a confirm
-  dialog). `removeProfile` deletes the auth user; FKs null out assignment and history. Same rule as
-  role changes: admin-only, never yourself (`canRemoveProfile`).
-- **2026-10-21:** Deleted the pending staff account `jigbpatel2001@gmail.com` (asked to remove
-  "Jigisha Patel") via SQL on `auth.users`. Its one assigned request is now unassigned.
-- **2026-10-21:** An admin's invite to `tpa.mmcc@gmail.com` failed with "Error sending invite
-  email". Auth logs show the same Gmail `535 BadCredentials`: Supabase Auth's custom SMTP uses the
-  stale password too. No partial account was left behind.
-
+- **2026-10-21:** Email fully working again. Request emails were fixed first, with a new App
+  Password in Vercel `EMAIL_PASS` (sending from 11:56 UTC). Invites still failed with `535` because
+  Supabase's SMTP Username was not `tpa.mmcc@gmail.com`, the account that owns the App Password.
+  After fixing that, invites have sent since 23:40 UTC.
+- **PR #10 (2026-10-21):** Admins can remove team members (trash icon on the Team page, with a
+  confirm dialog). `removeProfile` deletes the auth user; FKs null out assignment and history.
+  Same rule as role changes: admin-only, never yourself (`canRemoveProfile`). Verified live.
+- **2026-10-21:** Removed `jigbpatel2001@gmail.com` (asked to remove "Jigisha Patel"), first via
+  SQL. It was later re-invited and removed again from the Team page. Its one assigned request is
+  unassigned.
 - **2026-10-18:** Test submission: Telegram sent; both emails (staff to `tpa.mmcc@gmail.com`,
   submitter confirmation) failed with Gmail `535-5.7.8 BadCredentials`. The SMTP login
   (`EMAIL_USER`/`EMAIL_PASS`) has been rejected since at least 2026-10-11; the last successful email
