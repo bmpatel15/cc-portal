@@ -74,6 +74,10 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#10 are merged to `main`.
 
+- **2026-10-21:** Vercel `EMAIL_PASS` is fixed: app emails send again (staff and submitter, from
+  11:56 UTC). Supabase Auth SMTP is still rejected (`535`) on an invite at 23:28 UTC, so the
+  Supabase SMTP settings still hold bad credentials.
+
 - **PR #10 (2026-10-21):** Admins can remove team members (trash icon on the Team page, with a confirm
   dialog). `removeProfile` deletes the auth user; FKs null out assignment and history. Same rule as
   role changes: admin-only, never yourself (`canRemoveProfile`).
@@ -106,9 +110,9 @@ Newest first. PRs #1–#10 are merged to `main`.
 ## Open items
 
 - [x] Set `EMAIL_TO=tpa.mmcc@gmail.com` in Vercel and redeploy. Done 2026-10-18.
-- [ ] **Fix SMTP login:** create a new Gmail App Password for the `EMAIL_USER` account, set it as
-      `EMAIL_PASS` in Vercel, redeploy, **and** paste it into Supabase → Authentication → SMTP
-      Settings. Until then, no email is sent and invites fail (Telegram still works).
+- [x] New Gmail App Password set as `EMAIL_PASS` in Vercel. App emails work (2026-10-21).
+- [ ] **Supabase Auth SMTP still rejected:** check username = `EMAIL_USER`, retype the App Password
+      (no spaces), host `smtp.gmail.com`, port 465, and Save. Until then invites and magic links fail.
 - [ ] Then re-send the invite to `tpa.mmcc@gmail.com`.
 - [ ] Then confirm a submission arrives at `tpa.mmcc@gmail.com`. Check with
       `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
