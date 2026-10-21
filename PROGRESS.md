@@ -72,9 +72,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 ## Log
 
-Newest first. PRs #1–#9 are merged to `main`.
+Newest first. PRs #1–#10 are merged to `main`.
 
-- **2026-10-21:** Admins can remove team members (trash icon on the Team page, with a confirm
+- **PR #10 (2026-10-21):** Admins can remove team members (trash icon on the Team page, with a confirm
   dialog). `removeProfile` deletes the auth user; FKs null out assignment and history. Same rule as
   role changes: admin-only, never yourself (`canRemoveProfile`).
 - **2026-10-21:** Deleted the pending staff account `jigbpatel2001@gmail.com` (asked to remove
