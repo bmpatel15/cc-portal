@@ -75,6 +75,10 @@ Pushing the tag runs `.github/workflows/release.yml`. It checks that the tag mat
 `package.json` and publishes a Release whose notes list the PRs merged since the last tag. Vercel
 deploys from `main` as usual, so releases are labels, not deploy triggers.
 
+If a tag is pushed but no Release appears (check `gh run list --workflow release.yml`), push the
+tag again: `git push origin :refs/tags/vX.Y.Z && git push origin vX.Y.Z`. This happened once with
+v0.3.0, whose tag was pushed together with the commit that first added the workflow.
+
 ## Configuration
 
 Env vars live in **Vercel → Project → Settings → Environment Variables** (and `.env.local` for local
@@ -98,7 +102,8 @@ dev, which is not in the repo). `.env.example` only documents them.
 Newest first. PRs #1–#10 are merged to `main`.
 
 - **v0.3.0 (2026-10-21):** First GitHub Release, covering PRs #1–#10. Added the release workflow
-  and tagged `v0.2.0` at fa3e1db (analytics layer) as the starting point.
+  and tagged `v0.2.0` at fa3e1db (analytics layer) as the starting point. Published at
+  https://github.com/bmpatel15/cc-portal/releases/tag/v0.3.0.
 
 - **2026-10-21:** Email fully working again. Request emails were fixed first, with a new App
   Password in Vercel `EMAIL_PASS` (sending from 11:56 UTC). Invites still failed with `535` because
