@@ -146,3 +146,4 @@ Newest first. PRs #1–#10 are merged to `main`.
 - [x] Confirmed submissions arrive at `tpa.mmcc@gmail.com` (2026-10-21). To check delivery:
       `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
 - [x] Version releases set up (2026-10-21). See **Releases**.
+- [ ] On the next release, confirm the workflow runs cleanly with `actions/checkout@v5`.
