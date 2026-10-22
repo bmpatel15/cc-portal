@@ -101,6 +101,8 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#10 are merged to `main`.
 
+- **2026-10-21:** Release workflow uses `actions/checkout@v5` (v4's Node 20 is deprecated). Not
+  yet exercised; the next tag push will confirm it.
 - **v0.3.0 (2026-10-21):** First GitHub Release, covering PRs #1–#10. Added the release workflow
   and tagged `v0.2.0` at fa3e1db (analytics layer) as the starting point. Published at
   https://github.com/bmpatel15/cc-portal/releases/tag/v0.3.0.
