@@ -104,9 +104,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 ## Log
 
-Newest first. PRs #1–#12 are merged to `main`.
+Newest first. PRs #1–#13 are merged to `main`.
 
-- **2026-11-04 (PR open):** The Last signed in column is hidden below `md` (768px), and
+- **PR #13 (2026-11-04):** The Last signed in column is hidden below `md` (768px), and
   "Joined" below `lg`, so neither showed for the user on a narrow screen. Below `md` the same
   text now shows as a line under the email ("Last signed in 3 days ago" / "Invite not
   accepted (sent …)" / "Never signed in").
