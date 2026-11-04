@@ -104,9 +104,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 ## Log
 
-Newest first. PRs #1–#11 are merged to `main`.
+Newest first. PRs #1–#12 are merged to `main`.
 
-- **PR #12 (2026-11-04, open):** Team page shows **Last signed in** (relative, exact time on hover),
+- **PR #12 (2026-11-04):** Team page shows **Last signed in** (relative, exact time on hover),
   or "Invite not accepted (sent …)" / "Never". `listProfiles` joins `auth.admin.listUsers()` by id,
   since PostgREST can't read `auth.users`. `last_sign_in_at` moves on each sign-in, not on token
   refresh.
