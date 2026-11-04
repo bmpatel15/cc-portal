@@ -1,5 +1,6 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { isSessionExpired } from '@/lib/auth/session-age'
 import { getPublicEnv } from '@/lib/env'
 import type { ProfileRow } from '@/lib/supabase/types'
 
@@ -44,6 +45,11 @@ export async function getCurrentProfile(): Promise<ProfileRow | null> {
   } = await supabase.auth.getUser()
 
   if (!user) return null
+
+  // The middleware signs these out, but it only runs on page routes. This keeps
+  // an over-age session out of route handlers such as /api/files too.
+  const { data: verified } = await supabase.auth.getClaims()
+  if (verified && isSessionExpired(verified.claims)) return null
 
   const { data } = await supabase
     .from('profiles')
