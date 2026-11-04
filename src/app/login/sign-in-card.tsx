@@ -60,6 +60,20 @@ function LoginNotices() {
     )
   }
 
+  if (params.get('expired') === '1') {
+    return (
+      <div className="flex gap-3 rounded-lg border bg-muted/40 p-4">
+        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="space-y-1">
+          <p className="text-sm font-medium">You&apos;ve been signed out</p>
+          <p className="text-sm text-muted-foreground">
+            For security, sign-ins last 48 hours. Sign in again below.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (callbackError) {
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">

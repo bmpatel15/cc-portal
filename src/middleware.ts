@@ -1,10 +1,12 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isSessionExpired } from '@/lib/auth/session-age'
 
 type CookiesToSet = Parameters<SetAllCookies>[0]
 
 /**
- * Refreshes the Supabase auth session cookie on admin routes.
+ * Refreshes the Supabase auth session cookie on admin routes, and signs out a
+ * session more than MAX_SESSION_AGE_SECONDS past its sign-in.
  *
  * The previous middleware guarded request body size; uploads now go straight to
  * storage with signed URLs, so nothing large reaches the app and that check is
@@ -20,9 +22,10 @@ export async function middleware(request: NextRequest) {
   // them leaves these undefined and createServerClient throws — which surfaces
   // as MIDDLEWARE_INVOCATION_FAILED and takes down every matched route.
   //
-  // This middleware only refreshes an expiring session cookie; it guards
-  // nothing. The admin layout and the server actions do that, and they fail
-  // closed on their own. So passing through is the safe degradation: a
+  // This middleware refreshes an expiring session cookie and ends over-age
+  // ones; it is not the guard. The admin layout and the server actions are, and
+  // they fail closed on their own (getCurrentProfile rejects over-age sessions
+  // too). So passing through is the safe degradation: a
   // misconfigured deploy shows a login page instead of a 500.
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error(
@@ -48,7 +51,28 @@ export async function middleware(request: NextRequest) {
 
   try {
     // Touching the user refreshes an expiring session and writes the new cookies.
-    await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { data } = await supabase.auth.getClaims()
+
+      if (data && isSessionExpired(data.claims)) {
+        // Revokes this session's refresh token and, through setAll above,
+        // clears the cookies on both the request and the response.
+        await supabase.auth.signOut({ scope: 'local' })
+
+        // The login page renders fine with the cookies gone; anywhere else is
+        // sent there with a reason, so the sign-out doesn't look like a bug.
+        if (request.nextUrl.pathname !== '/login') {
+          const signIn = NextResponse.redirect(new URL('/login?expired=1', request.url), 302)
+          response.cookies.getAll().forEach((cookie) => signIn.cookies.set(cookie))
+          signIn.headers.set('Cache-Control', 'private, no-store')
+          return signIn
+        }
+      }
+    }
   } catch (error) {
     // A refresh failure is not worth a 500 either — the request continues with
     // whatever cookie it arrived with, and the route's own guard decides.
