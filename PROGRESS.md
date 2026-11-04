@@ -106,6 +106,10 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#12 are merged to `main`.
 
+- **2026-11-04 (PR open):** The Last signed in column is hidden below `md` (768px), and
+  "Joined" below `lg`, so neither showed for the user on a narrow screen. Below `md` the same
+  text now shows as a line under the email ("Last signed in 3 days ago" / "Invite not
+  accepted (sent …)" / "Never signed in").
 - **PR #12 (2026-11-04):** Team page shows **Last signed in** (relative, exact time on hover),
   or "Invite not accepted (sent …)" / "Never". `listProfiles` joins `auth.admin.listUsers()` by id,
   since PostgREST can't read `auth.users`. `last_sign_in_at` moves on each sign-in, not on token
