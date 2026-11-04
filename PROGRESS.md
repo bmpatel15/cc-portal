@@ -4,7 +4,7 @@ Working memory for this project. Read this first instead of re-reading the whole
 update the **Log** and **Open items** at the end of every change. `README.md` covers setup and the
 design decisions in more depth.
 
-_Last updated: 2026-10-21_
+_Last updated: 2026-11-04_
 
 ## What this is
 
@@ -37,7 +37,7 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
 | Retry cron (daily 06:00 UTC) | `src/app/api/cron/dispatch-notifications/route.ts`, `vercel.json` |
 | Env var validation | `src/lib/env.ts` (template: `.env.example`) |
 | Auth: magic link, password, middleware | `src/app/login/`, `src/app/auth/`, `src/app/account/password/`, `src/middleware.ts`, `src/lib/auth/` |
-| Database schema (apply in order) | `supabase/migrations/0001`–`0008` |
+| Database schema (apply in order) | `supabase/migrations/0001`–`0009` |
 
 ## How it works (key rules)
 
@@ -56,7 +56,12 @@ There's no test suite. Verify with `npm run lint` and `npm run build`.
   (suspend) or remove (delete) anyone but themselves. Removing deletes the auth user; requests they
   held go back to unassigned and their history stays with no name attached.
 - **Tracking tokens** are never queryable by `anon`. The track page looks them up server-side.
-- **Current limits** (from `request.ts`): 10 files, 100 MB each (JPG/PNG/PDF/Word); up to 5
+- **Allowed file types** live in four places that must match: `ALLOWED_FILE_TYPES` and
+  `ALLOWED_FILE_EXTENSIONS` in `request.ts`, `TYPE_BY_EXTENSION` in `src/lib/files.ts`, and the
+  bucket's `allowed_mime_types` (the latest migration, plus the same array in 0001, 0004, 0005,
+  since each upserts it). Storage answers 415 for anything missing from the bucket list.
+- **Current limits** (from `request.ts`): 10 files, 100 MB each (PDF, Word, PowerPoint, and
+  images: JPG/PNG/GIF/WebP/HEIC/HEIF/TIFF/AVIF/BMP; no SVG); up to 5
   photographers and 3 videographers; up to 10 handheld, 4 headset, and 10 wired mics. Event dates
   can't be in the past.
 
@@ -100,6 +105,12 @@ dev, which is not in the repo). `.env.example` only documents them.
 ## Log
 
 Newest first. PRs #1–#10 are merged to `main`.
+
+- **2026-11-04:** Uploads accept PowerPoint (.ppt/.pptx), HEIC/HEIF, GIF, WebP, TIFF, AVIF and
+  BMP. New migration `0009_more_upload_types.sql` widens the bucket's mime list (same array synced
+  into 0001/0004/0005). SVG left out because it can carry script. HEIC only previews in Safari;
+  elsewhere it downloads.
+  Migration applied to the live project the same day.
 
 - **2026-10-21:** Release workflow uses `actions/checkout@v5` (v4's Node 20 is deprecated). Not
   yet exercised; the next tag push will confirm it.
@@ -146,4 +157,7 @@ Newest first. PRs #1–#10 are merged to `main`.
 - [x] Confirmed submissions arrive at `tpa.mmcc@gmail.com` (2026-10-21). To check delivery:
       `select channel, template, recipient, status, last_error from notification_log order by created_at desc limit 6;`
 - [x] Version releases set up (2026-10-21). See **Releases**.
+- [x] Applied `0009_more_upload_types.sql` to the live Supabase project (2026-11-04, via the
+      Supabase MCP). Verified the bucket lists all 14 types and is still private.
+- [ ] Once the PR deploys, upload a .pptx and a HEIC through the form to confirm end to end.
 - [ ] On the next release, confirm the workflow runs cleanly with `actions/checkout@v5`.

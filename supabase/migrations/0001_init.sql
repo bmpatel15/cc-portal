@@ -249,9 +249,18 @@ values (
   array[
     'image/jpeg',
     'image/png',
+    'image/gif',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+    'image/tiff',
+    'image/avif',
+    'image/bmp',
     'application/pdf',
     'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
   ]
 )
 on conflict (id) do update

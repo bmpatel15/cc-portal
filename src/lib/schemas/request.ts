@@ -112,16 +112,26 @@ export const MAX_WIRED_MICS = 10
 export const ALLOWED_FILE_TYPES = [
   'image/jpeg',
   'image/png',
+  'image/gif',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'image/tiff',
+  'image/avif',
+  'image/bmp',
   'application/pdf',
   'application/msword', // .doc
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.ms-powerpoint', // .ppt
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
 ] as const
 export type AllowedFileType = (typeof ALLOWED_FILE_TYPES)[number]
 
-export const ALLOWED_FILE_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.doc,.docx'
+export const ALLOWED_FILE_EXTENSIONS =
+  '.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.tif,.tiff,.avif,.bmp,.pdf,.doc,.docx,.ppt,.pptx'
 
 /** One phrasing for the accept list, so UI copy and zod messages cannot drift. */
-export const ALLOWED_FILE_LABEL = 'JPG, PNG, PDF, or Word'
+export const ALLOWED_FILE_LABEL = 'PDF, Word, PowerPoint, or image'
 
 export const uploadedFileSchema = z.object({
   name: requiredText('File name is required'),
