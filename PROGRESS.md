@@ -104,9 +104,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 ## Log
 
-Newest first. PRs #1–#13 are merged to `main`.
+Newest first. PRs #1–#14 are merged to `main`.
 
-- **2026-11-04 (PR open):** Sign-ins now last 48 hours (`MAX_SESSION_AGE_SECONDS` in
+- **PR #14 (2026-11-04):** Sign-ins now last 48 hours (`MAX_SESSION_AGE_SECONDS` in
   `src/lib/auth/session-age.ts`). Supabase refreshes tokens indefinitely, so a phone with the
   site saved as an app stayed signed in for months (one session dated from 2026-08-16) and
   "Last signed in" was misleading. The age comes from the JWT `amr` timestamp, which survives
