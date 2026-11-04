@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { ArrowLeft, Loader2, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/table'
 import { displayName } from '@/lib/profiles/display'
 import { USER_ROLES } from '@/lib/schemas/profile'
-import type { ProfileRow, UserRole } from '@/lib/supabase/types'
+import type { TeamMember, UserRole } from '@/lib/supabase/types'
 
 import { inviteStaffAction, removeProfileAction, updateProfileAction } from './actions'
 
@@ -50,7 +50,7 @@ export function UsersTable({
   profiles,
   currentUserId,
 }: {
-  profiles: ProfileRow[]
+  profiles: TeamMember[]
   currentUserId: string
 }) {
   const router = useRouter()
@@ -58,11 +58,11 @@ export function UsersTable({
   const [saving, setSaving] = React.useState<string | null>(null)
   const [pending, startTransition] = React.useTransition()
   // The row awaiting confirmation in the remove dialog.
-  const [removing, setRemoving] = React.useState<ProfileRow | null>(null)
+  const [removing, setRemoving] = React.useState<TeamMember | null>(null)
 
   const waiting = profiles.filter((profile) => !profile.is_active).length
 
-  function save(profile: ProfileRow, changes: { role?: UserRole; isActive?: boolean }) {
+  function save(profile: TeamMember, changes: { role?: UserRole; isActive?: boolean }) {
     setSaving(profile.id)
 
     startTransition(async () => {
@@ -83,7 +83,7 @@ export function UsersTable({
     })
   }
 
-  function remove(profile: ProfileRow) {
+  function remove(profile: TeamMember) {
     setSaving(profile.id)
 
     startTransition(async () => {
@@ -131,6 +131,7 @@ export function UsersTable({
             <TableRow>
               <TableHead>Person</TableHead>
               <TableHead className="hidden lg:table-cell">Joined</TableHead>
+              <TableHead className="hidden md:table-cell">Last signed in</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Access</TableHead>
             </TableRow>
@@ -152,6 +153,10 @@ export function UsersTable({
 
                   <TableCell className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
                     {format(new Date(profile.created_at), 'd MMM yyyy')}
+                  </TableCell>
+
+                  <TableCell className="hidden whitespace-nowrap text-muted-foreground md:table-cell">
+                    <LastSignIn profile={profile} />
                   </TableCell>
 
                   <TableCell>
@@ -254,6 +259,34 @@ export function UsersTable({
       </Dialog>
     </div>
   )
+}
+
+/**
+ * Relative time, with the exact moment on hover.
+ *
+ * Both depend on the viewer's clock and time zone, which the server rendering
+ * this does not share, so the text is allowed to differ on hydration.
+ */
+function LastSignIn({ profile }: { profile: TeamMember }) {
+  if (profile.last_sign_in_at) {
+    const at = new Date(profile.last_sign_in_at)
+
+    return (
+      <span title={format(at, 'd MMM yyyy, h:mm a')} suppressHydrationWarning>
+        {formatDistanceToNow(at, { addSuffix: true })}
+      </span>
+    )
+  }
+
+  if (profile.invite_pending_since) {
+    return (
+      <span suppressHydrationWarning>
+        Invite not accepted (sent {format(new Date(profile.invite_pending_since), 'd MMM')})
+      </span>
+    )
+  }
+
+  return <span>Never</span>
 }
 
 /**

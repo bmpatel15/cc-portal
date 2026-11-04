@@ -6,7 +6,7 @@ import {
 } from '@/lib/requests/permissions'
 import type { Invite, ProfileRemove, ProfileUpdate } from '@/lib/schemas/profile'
 import { getAdminClient } from '@/lib/supabase/admin'
-import type { ProfileRow, ProfileSummary } from '@/lib/supabase/types'
+import type { ProfileRow, ProfileSummary, TeamMember } from '@/lib/supabase/types'
 import { authCallbackUrl } from '@/lib/urls'
 
 /**
@@ -18,15 +18,37 @@ import { authCallbackUrl } from '@/lib/urls'
 
 const PROFILE_SELECT = 'id, email, full_name, role, is_active, created_at'
 
-/** Everyone with a profile, including accounts still waiting for approval. */
-export async function listProfiles(): Promise<ProfileRow[]> {
-  const { data, error } = await getAdminClient()
-    .from('profiles')
-    .select(PROFILE_SELECT)
-    .order('created_at', { ascending: true })
+/**
+ * Everyone with a profile, including accounts still waiting for approval, with
+ * when each last signed in.
+ *
+ * Sign-in times live on auth.users, which PostgREST does not expose, so they
+ * come from the Auth admin API and are joined here by id. One page of 1000
+ * covers any team this app will have.
+ */
+export async function listProfiles(): Promise<TeamMember[]> {
+  const supabase = getAdminClient()
 
-  if (error) throw new Error(`Failed to load team members: ${error.message}`)
-  return (data ?? []) as ProfileRow[]
+  const [profiles, users] = await Promise.all([
+    supabase.from('profiles').select(PROFILE_SELECT).order('created_at', { ascending: true }),
+    supabase.auth.admin.listUsers({ perPage: 1000 }),
+  ])
+
+  if (profiles.error) throw new Error(`Failed to load team members: ${profiles.error.message}`)
+  if (users.error) throw new Error(`Failed to load sign-in times: ${users.error.message}`)
+
+  const byId = new Map(users.data.users.map((user) => [user.id, user]))
+
+  return ((profiles.data ?? []) as ProfileRow[]).map((profile) => {
+    const user = byId.get(profile.id)
+
+    return {
+      ...profile,
+      last_sign_in_at: user?.last_sign_in_at ?? null,
+      invite_pending_since:
+        user?.invited_at && !user.email_confirmed_at ? user.invited_at : null,
+    }
+  })
 }
 
 /** Candidates for the assignment dropdown. */
