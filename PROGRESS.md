@@ -106,6 +106,18 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#11 are merged to `main`.
 
+- **2026-11-04 (PR open):** Team page shows **Last signed in** (relative, exact time on hover),
+  or "Invite not accepted (sent …)" / "Never". `listProfiles` joins `auth.admin.listUsers()` by id,
+  since PostgREST can't read `auth.users`. `last_sign_in_at` moves on each sign-in, not on token
+  refresh.
+- **2026-11-04:** Invites not arriving. Five Gmail invitees from 2026-10-23 never confirmed (list them with
+  `select email, invited_at from auth.users where email_confirmed_at is null;`). Supabase auth
+  logs show every `/invite` returned 200, so Gmail SMTP accepted each one. The only invite
+  accepted that day went to `tpa.mmcc@gmail.com`, the sending account itself, which doesn't prove
+  external delivery. App emails from the same account do reach outside Gmail addresses
+  (`notification_log`, all `sent`). Not yet known: whether Gmail bounced or filtered the
+  invites. Next step: check `tpa.mmcc@gmail.com` Sent and Inbox for bounce notices, and run a
+  magic-link test to an outside address. Those invite links have expired either way.
 - **PR #11 (2026-11-04):** Uploads accept PowerPoint (.ppt/.pptx), HEIC/HEIF, GIF, WebP, TIFF, AVIF and
   BMP. New migration `0009_more_upload_types.sql` widens the bucket's mime list (same array synced
   into 0001/0004/0005). SVG left out because it can carry script. HEIC only previews in Safari;
@@ -160,4 +172,6 @@ Newest first. PRs #1–#11 are merged to `main`.
 - [x] Applied `0009_more_upload_types.sql` to the live Supabase project (2026-11-04, via the
       Supabase MCP). Verified the bucket lists all 14 types and is still private.
 - [ ] Once the PR deploys, upload a .pptx and a HEIC through the form to confirm end to end.
+- [ ] Find out why invite emails don't arrive (see the 2026-11-04 log entry), then re-invite
+      the five pending people.
 - [ ] On the next release, confirm the workflow runs cleanly with `actions/checkout@v5`.
