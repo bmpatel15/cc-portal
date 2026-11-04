@@ -106,6 +106,17 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 Newest first. PRs #1–#13 are merged to `main`.
 
+- **2026-11-04 (PR open):** Sign-ins now last 48 hours (`MAX_SESSION_AGE_SECONDS` in
+  `src/lib/auth/session-age.ts`). Supabase refreshes tokens indefinitely, so a phone with the
+  site saved as an app stayed signed in for months (one session dated from 2026-08-16) and
+  "Last signed in" was misleading. The age comes from the JWT `amr` timestamp, which survives
+  refreshes. Middleware signs over-age sessions out and redirects to `/login?expired=1`;
+  `getCurrentProfile` also rejects them, which covers `/api/files`. The Supabase setting for
+  this is paid-plan only. On deploy, almost every existing session is already over 48 hours.
+- **2026-11-04:** Invites do arrive now. One of the five pending invitees was removed and
+  re-invited at 18:27 UTC and accepted three minutes later. A later "otp_expired" on `/verify`
+  fits an invite opened after its account was removed again. The Oct 23 failures are
+  unexplained (the links expired either way). Remove and re-invite the other four.
 - **PR #13 (2026-11-04):** The Last signed in column is hidden below `md` (768px), and
   "Joined" below `lg`, so neither showed for the user on a narrow screen. Below `md` the same
   text now shows as a line under the email ("Last signed in 3 days ago" / "Invite not
@@ -176,6 +187,6 @@ Newest first. PRs #1–#13 are merged to `main`.
 - [x] Applied `0009_more_upload_types.sql` to the live Supabase project (2026-11-04, via the
       Supabase MCP). Verified the bucket lists all 14 types and is still private.
 - [ ] Once the PR deploys, upload a .pptx and a HEIC through the form to confirm end to end.
-- [ ] Find out why invite emails don't arrive (see the 2026-11-04 log entry), then re-invite
-      the five pending people.
+- [ ] Re-invite the four people still pending from 2026-10-23 (remove, then invite). A fresh
+      invite was delivered and accepted on 2026-11-04.
 - [ ] On the next release, confirm the workflow runs cleanly with `actions/checkout@v5`.
