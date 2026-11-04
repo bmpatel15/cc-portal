@@ -76,6 +76,17 @@ export interface ProfileRow {
   created_at: string
 }
 
+/**
+ * A profile plus the sign-in facts that live only on the auth user. Read for the
+ * Team page; nothing writes these.
+ */
+export interface TeamMember extends ProfileRow {
+  /** Null until they first sign in. Token refreshes do not move it. */
+  last_sign_in_at: string | null
+  /** When the latest invite went out, if they have not accepted one yet. */
+  invite_pending_since: string | null
+}
+
 export interface RequestTimeEntryRow {
   id: string
   request_id: string
