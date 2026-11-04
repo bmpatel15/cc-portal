@@ -149,6 +149,11 @@ export function UsersTable({
                       {isSelf ? <span className="text-muted-foreground"> (you)</span> : null}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{profile.email}</p>
+                    {/* The column below is hidden on narrow screens, so the same fact
+                        rides under the email there instead. */}
+                    <p className="truncate text-xs text-muted-foreground md:hidden">
+                      <LastSignIn profile={profile} inline />
+                    </p>
                   </TableCell>
 
                   <TableCell className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
@@ -266,13 +271,17 @@ export function UsersTable({
  *
  * Both depend on the viewer's clock and time zone, which the server rendering
  * this does not share, so the text is allowed to differ on hydration.
+ *
+ * `inline` is for the line under the email on narrow screens, where there is no
+ * column header to say what the time means.
  */
-function LastSignIn({ profile }: { profile: TeamMember }) {
+function LastSignIn({ profile, inline = false }: { profile: TeamMember; inline?: boolean }) {
   if (profile.last_sign_in_at) {
     const at = new Date(profile.last_sign_in_at)
 
     return (
       <span title={format(at, 'd MMM yyyy, h:mm a')} suppressHydrationWarning>
+        {inline ? 'Last signed in ' : ''}
         {formatDistanceToNow(at, { addSuffix: true })}
       </span>
     )
@@ -286,7 +295,7 @@ function LastSignIn({ profile }: { profile: TeamMember }) {
     )
   }
 
-  return <span>Never</span>
+  return <span>{inline ? 'Never signed in' : 'Never'}</span>
 }
 
 /**
