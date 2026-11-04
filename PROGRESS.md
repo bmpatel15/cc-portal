@@ -104,9 +104,9 @@ dev, which is not in the repo). `.env.example` only documents them.
 
 ## Log
 
-Newest first. PRs #1–#10 are merged to `main`.
+Newest first. PRs #1–#11 are merged to `main`.
 
-- **2026-11-04:** Uploads accept PowerPoint (.ppt/.pptx), HEIC/HEIF, GIF, WebP, TIFF, AVIF and
+- **PR #11 (2026-11-04):** Uploads accept PowerPoint (.ppt/.pptx), HEIC/HEIF, GIF, WebP, TIFF, AVIF and
   BMP. New migration `0009_more_upload_types.sql` widens the bucket's mime list (same array synced
   into 0001/0004/0005). SVG left out because it can carry script. HEIC only previews in Safari;
   elsewhere it downloads.
